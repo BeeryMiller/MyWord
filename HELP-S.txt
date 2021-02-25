@@ -1,0 +1,130 @@
+* help file, take 3, hard drives and dodd have compounded this
+*  jack-assinine effort <cough>
+
+HPAB   EQU  >1000
+HPABDT EQU  >1080
+       EVEN
+*
+HELPTX TEXT 'HELP'
+HELPDT DATA >0014,HPABDT,>0000,0,15
+       BSS  40
+       EVEN
+*
+HLPINI MOV  @VOLLEN,R2
+       LI   R1,HELPDT+10
+       LI   R0,VOLUME
+HLPIN0 MOVB *R0+,*R1+         build volume name
+       DEC  R2
+       JNE  HLPIN0
+       LI   R0,HELPTX
+       MOVB *R0+,*R1+         put in filename "help"
+       MOVB *R0+,*R1+
+       MOVB *R0+,*R1+
+       MOVB *R0,*R1
+       MOV  @VOLLEN,R2
+       AI   R2,4
+       MOV  R2,@HELPDT+8
+*
+       LI   R0,HPAB
+       LI   R1,HELPDT
+       LI   R2,50
+       BLWP @VMBW
+       AI   R0,9
+       MOV  R0,@>8356
+       BLWP @DSRLNK           open file
+       DATA 8
+*
+       CLR  R12               memory counter
+*
+       LI   R0,HPAB
+       LI   R1,>0200          change op to read
+       BLWP @VSBW
+*
+       MOVB @>8005,R10        save current page
+       MOVB @HELPPG,@>8005    >a000 page
+*
+       CLR  R6                line counter
+       LI   R7,>A000          data pointer
+*
+       MOV  R7,R0
+       LI   R1,'  '
+HLPI10 MOV  R1,*R0+           null out entire help page
+       CI   R0,>C000
+       JNE  HLPI10
+*
+HLPLOP LI   R0,HPAB+9
+       MOV  R0,@>8356
+       BLWP @DSRLNK           read next record
+       DATA 8
+*
+       LI   R0,HPAB+5
+       BLWP @VSBR             get length of record
+       SRL  R1,8              as a word
+       JEQ  HLPL10             null
+       A    R1,R12            count the number of bytes loaded
+       MOV  R1,R2
+       MOV  R7,R1
+       LI   R0,HPABDT
+       BLWP @VMBR             read record into page
+HLPL10 AI   R7,80             next record
+       INC  R6                record counted
+       CI   R6,24*4           4 pages loaded?
+       JNE  HLPLOP            nope....
+*
+       LI   R0,HPAB
+       LI   R1,>0100
+       BLWP @VSBW
+       AI   R0,9
+       MOV  R0,@>8356
+       BLWP @DSRLNK           close the file
+       DATA 8
+*
+       CI   R12,24*40*4       enough loaded
+       JH   HLPL20            yup
+       BLWP @0                 choke
+*
+HLPL20 MOVB R10,@>8005        restore page
+       RTWP
+*
+* display page number requested in calling r0
+*
+HELP00 BLWP @MODE80           24 line mode
+       DATA 0
+       LI   R2,24*80          length of page
+       MOV  *R13,R0           get page number
+       MPY  R2,R0             r0=0; r1=offset into help page
+       MOVB @>8000,R10
+       MOVB @HELPPG,@>8000
+       BLWP @VMBW             show page
+       MOVB R10,@>8000
+*
+*      wait for a key to continue
+*
+HELP20 BLWP @KSCAN
+       MOVB @>8375,R1
+       CB   R1,@BACH
+       JL   HELP25
+       CB   R1,@BACH+1
+       JH   HELP25
+       SB   @BACH,R1
+       SRL  R1,8
+       INCT R1
+       LI   R2,300
+       MPY  R1,R2             r3=the basic delay
+       MOVB @>8006,@BACH+2
+       LI   R0,>0300
+       MOVB R0,@>8006
+       BL   @MUSIC
+       MOVB @BACH+2,@>8006
+       JMP  HELP20
+HELP25 MOVB @>837C,R0
+       JEQ  HELP20
+       MOVB @>8375,*R13       return keypress is MSB of R0
+*
+       BLWP @MODE80           26.5 line mode
+       DATA 26
+       RTWP
+*
+BACH   BYTE 177,183
+       DATA 0
+*

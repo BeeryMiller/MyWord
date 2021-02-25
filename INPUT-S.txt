@@ -1,0 +1,111 @@
+INPUT  DATA INPWS,INPUT0
+INPUTS DATA INPWS,INPUT9
+INPWS  BSS  32
+CR     BYTE 13           A CARRIAGE RETURN
+BACKSP BYTE 08           BACK SPACE CHARACTER
+BACK   BYTE 15           A "F9" BACK CHARACTER
+KILL   BYTE 07                character to erase entire line
+LOWLIM BSS  2            HOLD FOR THE LOWER LIMIT CHARACTER.
+       EVEN
+
+* R0 IS ADDRESS ON SCREEN
+* R1 IS ADDRESS OF BUFFER
+* R2 IS LENGTH
+
+INPUT9
+       LI   R0,32
+       JMP  INPUTA
+
+INPUT0
+       LI   R0,33
+INPUTA
+       MOV  R0,@LOWLIM
+       LI   R0,>0300
+       MOVB R0,@>8374         SELECT UPPER CASE ONLY
+*
+INPUTB MOV  *R13,R0
+       MOV  @4(R13),R2   GET THE LENGTH
+       LI   R1,>2000
+INPT01 BLWP @VSBW
+       INC  R0
+       DEC  R2
+       JNE  INPT01
+
+       MOV  *R13,R7      ADDRESS ON SCREEN
+       MOV  @2(R13),R8   ADDRESS OF BUFFER
+       INC  R8           LEAVE SPACE FOR THE LENGTH
+       CLR  R9           LENGTH COUNTER
+
+INPT02
+       MOV  R7,R0        GET SCREEN ADDRES
+       LI   R1,>1E00     CURSOR CHARACTER
+       BLWP @VSBW        PUT UP THE CURSOR
+
+       BLWP @KSCAN
+       MOVB @>837C,R0    GET THE STATUS BYTE
+       ANDI R0,>2000
+       JEQ  INPT02       NO NEW KEY . . . KEEP WAITING
+
+       MOV  R7,R0
+       LI   R1,>2000
+       BLWP @VSBW        TAKE DOWN THE CURSOR
+
+       MOVB @>8375,R1    GET THE KEY
+       ANDI R1,>7F00     make it a 7 bit ascii code
+
+       CB   R1,@CR       IS IT A C/R?
+       JEQ  INPT03       GET OUT!
+
+       CB   R1,@KILL          erase line?
+       JEQ  INPUTB            restart this routine <same as erase line>
+
+       CI   R1,>0F00     F9?
+       JEQ  INPT09       RETURN NULL STRING
+
+       CB   R1,@BACKSP   IS IT A BACK SPACE?
+       JNE  INPT04       NOPE. SKIP AHEAD
+
+       MOV  R9,R9        IS LENGTH 0?
+       JEQ  INPT02       YES. KEEP WAITING.
+
+       DEC  R9           DECREMENT LENGTH
+       MOV  R7,R0        GET SCREEN ADDRESS
+       LI   R1,>2000     GET A SPACE CHARACTER
+       BLWP @VSBW        PUT UP THE SPACE
+       DEC  R7           DECREMENT THE SCREEN ADDRESS
+       DEC  R8           DECREMENT THE BUFFER ADDRESS
+       JMP  INPT02       AND WAIT FOR NEXT CHARACTER
+
+INPT04
+       MOV  R1,R5        *
+       SRL  R5,8         * IF CHAR IS LESS THAN AN
+       C    R5,@LOWLIM   * ASCII 33, DON'T TAKE IT!
+       JLT  INPT02       *
+
+       CI   R5,126       * IF CHAR IS GREATER THAN AN
+       JGT  INPT02       * ASCII 126, DON'T TAKE IT!
+
+       MOVB R1,*R8+      PUT CHARACTER IN THE BUFFER
+
+       MOV  R7,R0        GET SCREEN ADDRESS
+       BLWP @VSBW        PUT UP THE CHARACTER
+
+       INC  R7           INCREMENT SCREEN BUFFER
+
+       INC  R9           INCREMENT THE COUNTER
+       C    R9,@4(R13)   COMPARE WITH LENGTH
+       JNE  INPT02       IF NOT DONE, GO BACK
+
+INPT03
+       SWPB R9   *
+       MOV  @2(R13),R1
+       MOVB R9,*R1       PUT IN LENGTH BYTE
+
+       LI   R0,>0500
+       MOVB R0,@>8374         SELECT LOWERUPPER CASE KB
+       RTWP              AND RETURN
+
+INPT09
+       CLR  R9           LENGTH IS ZERO
+       JMP  INPT03       INSTALL LENGTH BYTE
+

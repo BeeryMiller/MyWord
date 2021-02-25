@@ -1,0 +1,111 @@
+       IDT  'TEXT'
+       DEF  OVRLEN
+       DEF  HELP1
+       DEF  MSD,MPF,MQE
+       DEF  MSV,MLF,MDF
+       DEF  MML,MCL,MDL,MSL
+       DEF  MFS,MRS,MTAB
+       DEF  MMT,MMT1,MODE,MPG,MPGL
+       DEF  MODF,MODFL,MODS,MODSL,MODL,MODLL                            7-21
+       DEF  MRE,MREL
+       DEF  MJPH,MVER,MWC
+       DEF  MOTHER            a female of the species with offspring
+       DEF  MHELP
+*-------------------------------------------------------------------------
+*      Text for the File management
+*-------------------------------------------------------------------------
+*           '0123456789 123456789 123456789 0123456789'
+       EVEN
+OVRLEN EQU  $  End of overlay code for loadsave
+HELP1  EQU  $
+MSD    BYTE MSDL
+*      TEXT 'SHOW DIRECTORY, enter disk number:'
+       TEXT 'BS SD'
+MSDL   EQU  $-MSD-1
+MSV    BYTE MSVL
+       TEXT 'SAVE FILE, enter filename:'                                8-24
+MSVL   EQU  $-MSV-1
+MLF    BYTE MLFL
+       TEXT 'LOAD FILE, enter filename:'                                8-24
+MLFL   EQU  $-MLF-1
+MPF    BYTE  MPFL
+       TEXT 'PRINT FILE, enter devicename:'                             8-24
+MPFL   EQU  $-MPF-1
+MDF    BYTE MDFL
+       TEXT 'DELETE FILE, enter filename:'                              8-24
+MDFL   EQU  $-MDF-1
+MQE    BYTE MQEL
+       TEXT 'QUIT: Exit Purge Save'
+MQEL   EQU  $-MQE-1
+MODE   BYTE  MODEL
+       TEXT 'Files FOrmatter Help Lines Other'
+       TEXT ' Quit SearcH Tabs'
+       TEXT ' Utility'
+MODEL  EQU  $-MODE-1
+MODF   BYTE MODFL
+       TEXT 'FILES: '
+       TEXT 'DeleteF LoadF PrintF Purge Sav'
+       TEXT 'eF ShowDirectory ViewF'
+MODFL  EQU  $-MODF-1
+MODL   BYTE MODLL
+       TEXT 'LINES: Copy Delete Move Show'
+MODLL  EQU  $-MODL-1
+MODS   BYTE MODSL
+       TEXT 'SEARCH: ChangeWildcard FindString '
+       TEXT 'ReplaceString'
+MODSL  EQU  $-MODS-1
+MRE    BYTE MREL
+       TEXT 'Recover Edit (Yes or No)?'
+MREL   EQU  $-MRE-1
+MFS    BYTE MFSL
+       TEXT 'FIND enter /string/ :'
+MFSL   EQU  $-MFS-1
+MRS    BYTE MRSL
+       TEXT 'REPLACE enter /old string/new string/ :'
+MRSL   EQU  $-MRS-1
+MML    BYTE MMLL
+       TEXT 'MOVE start line, stop line, after line:'
+MMLL   EQU  $-MML-1
+MCL    BYTE MCLL
+       TEXT 'COPY start line, stop line, after line:'
+MCLL   EQU  $-MCL-1
+MSL    BYTE MSLL
+       TEXT 'SHOW LINE enter line number:'                              8-24
+MSLL   EQU  $-MSL-1
+MDL    BYTE MDLL
+       TEXT 'DELETE enter start line, and stop line:'
+MDLL   EQU  $-MDL-1
+MPG    BYTE MPGL
+       TEXT 'PURGE FILE, are you sure (Yes or No)?'
+MPGL   EQU  $-MPG-1
+MJPH   BYTE MJPHL
+       TEXT 'By J. Peter Hoddie'
+MJPHL  EQU  $-MJPH-1
+MVER   BYTE MVERL
+       TEXT 'Programmed by J. Peter Hoddie '
+       TEXT ' Version 1.22 January 20, 1989'
+MVERL  EQU  $-MVER-1
+MTAB   BYTE MTABL
+       TEXT 'TABS: EditTabs ShowTabs TabsOff'
+MTABL  EQU  $-MTAB-1
+MWC    BYTE MWCL
+       TEXT 'CHANGE WILDCARD, enter wildcard:'
+MWCL   EQU  $-MWC-1
+MHELP  BYTE MHELPL
+       TEXT 'HELP: ControlU EditCommands EditKeys '
+       TEXT 'FormatterCommands'
+MHELPL EQU  $-MHELP-1
+MOTHER BYTE MOTHL
+       TEXT 'OTHER: Interlace ProgramEdit '
+       TEXT 'RecoverEdit SaveOptions SetPath '
+       TEXT 'TextEdit Version'
+MOTHL  EQU  $-MOTHER-1
+MMT    BYTE MMTL                                           END HERE.
+       TEXT ' TABS  123456789 123456789 123456789 12345678'
+       TEXT '9 123456789 123456789 123456789 123456789'
+MMT1   TEXT '      '
+       TEXT '0---------1---------2---------'
+       TEXT '3---------4---------5---------'
+       TEXT '6---------7---------8'
+MMTL   EQU  $-MMT-1
+       END

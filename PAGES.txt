@@ -1,0 +1,11 @@
+* where page list is stored in "semi" scratch pad . . .
+HELPPG EQU  >804F
+EDITPG EQU  >8050
+FORMPG EQU  >8052
+CATPAG EQU  >8054
+UTILPG EQU  >8055
+BUFFPG EQU  >8059
+*
+VOLLEN EQU  >8080
+VOLUME EQU  >8082
+

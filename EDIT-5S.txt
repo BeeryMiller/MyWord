@@ -1,0 +1,550 @@
+       RT
+       PAGE
+*-------------------------------------------------------------------------
+*      Subroutines for command mode
+*-------------------------------------------------------------------------
+PARSXX CLR  @FFLAG            VARIABLE 80 FORMAT                        11-22 JJ
+       CLR  @LFLAG            NO LINE NUMBERS  SEE REF/DEF              11-22 JJ
+PARSEA LI   R8,CTEXT
+PARSEB SETO @LOADS
+       JMP  PARS02
+PARSE  EQU  $
+       CLR  @LOADS
+PARS02 MOV  R11,@LEVEL1       Save return address
+       SETO @COLNUM
+       MOV  @TWO,@NUMCHK
+       MOV  @SIX,R14
+       MOV  @EOF,@COLEND
+       CLR  @COLSTA
+       BL   @RESTLA           Restore line address
+       ABS  @LOADS
+       JNE  PARS04
+       MOV  R9,@COLEND        Put line end in col end
+       MOV  @LINADR,@COLSTA
+       A    R14,@COLSTA       Calc column start.
+PARS04 SETO @NUM1             Default count
+*
+PARS10 CI   R8,CTXTND         Past end of line?
+       JHE  PARERR            Yes, error
+       CB   *R8+,@COMMA       ignore commas
+       JEQ  PARS10
+       DEC  R8
+       CB   *R8+,@BLANK       ignore leading blanks
+       JEQ  PARS10
+       DEC  R8
+       CB   *R8,@SLASH        Found first slash ?
+       JEQ  PARS30            Yes
+       CB   *R8,@H39          String, use blank as delimiter.
+       JGT  PARS28
+PARS08 BL   @NUMBER           must be a number
+       DEC  R8
+       DEC  @NUMCHK           which number is this?
+       JLT  PARS12            last number
+       JEQ  PARS11            next to last number
+       MOV  R12,@NUM1         first number
+       MOV  R0,@SAVER0                                                  10-6 JJ
+       JMP  PARS10
+PARS11 MOV  R12,@NUM2         second number
+       JMP  PARS10
+PARS12 MOV  R12,@NUM3         third number
+       JMP  PARS10
+
+*
+PARS20 MOV  @NUM1,@CNT        first number was count
+       INC  @CNT
+       DEC  R6                any more numbers?
+       JEQ  PARXIT            No, exit
+       JGT  PARXIT            No, exit
+       LI   R6,NUM2
+PARS24 MOV  *R6+,R12         Come here for 2 numbers
+       ABS  @LOADS            called from overlay?
+       JNE  PARS22            yes
+       A    @LINADR,R12
+       A    R14,R12           Add 6 for line numbers
+       C    R12,@COLEND       Legal number?
+       JGT  PARERR            No
+PARS22 MOV  R12,@COLSTA       Yes, get stop column
+       MOV  *R6+,R12         Last number.
+       ABS  @LOADS
+       JNE  PARS25
+       A    @LINADR,R12
+       A    R14,R12           Add 6 for line numbers
+       C    R12,@COLSTA       Legal?
+       JLT  PARERR            No.
+PARS25 MOV  R12,@COLEND
+PARXIT MOV  @LEVEL1,R11       Yes, exit
+       RT
+*
+PARS28 CB   *R8,@TE           'E ','E,','E/'
+       JNE  PARS29
+       CB   @1(R8),@BLANK
+       JEQ  PARS08            MUST MEAN END OF FILE.
+       CB   @1(R8),@COMMA
+       JEQ  PARS08
+       CB   @1(R8),@SLASH
+       JEQ  PARS08
+PARS29 MOVB @BLANK,@DELIM     Otherwise must be a string.
+       JMP  PARS32
+*
+PARS30 MOVB *R8,@DELIM
+       INC  R8                Found first slash = string
+PARS32 MOV  R8,@STRING
+       BL   @GSLASH           Find end slash
+       JMP  PARERR            None, so syntax error
+       MOV  R6,@STRL
+       MOV  R8,@RSTRNG        Yes, see if another slash
+       BL   @GSLASH
+       CLR  R6                Only happens with error
+PARS36 MOV  R6,@RSTRL         Else returns here
+       CLR  @COLNUM
+       MOV  @NUMCHK,R6
+       JGT  PARS20            ONE OR THREE NUMBERS
+       JLT  PARS20
+       LI   R6,NUM1
+       JMP  PARS24            ONLY TWO NUMBERS
+*
+*
+GSLASH SETO R6
+GSLA10 CI   R8,CTXTND
+       JHE  GSLA30                                                      9-28 JJ
+       INC  R6
+       CB   *R8+,@DELIM
+       JNE  GSLA10
+       INCT R11
+GSLA20 RT
+GSLA30 ABS  @RSFLAG           REPLACE STRING?                           9-28 JJ
+       JEQ  GSLA20            NO                                        9-28 JJ
+PARERR CLR  @COLNUM                                                     11-05 JJ
+       B    @ERRMSG                                                     11-05 JJ
+*
+RESTLA EQU  $                 Restore line address
+       LI   R9,LINBF0         For find and replace string.
+       MOV  R9,@LINADR
+       AI   R9,85
+       MOV  R9,@LINEND
+       RT
+*----------------------------------------------------------------       10-15 JJ
+SKIPBK LI   R8,CTEXT                                                    10-15 JJ
+SKIP10 CI   R8,CTXTND         Scan past leading blanks.                 10-15 JJ
+       JHE  SKIP20                                                      10-15 JJ
+       CB   *R8+,@BLANK
+       JEQ  SKIP10                                                      10-15 JJ
+SKIP20 DEC  R8                                                          10-15 JJ
+       RT
+       PAGE
+*-------------------------------------------------------------------------
+*      Replace string subroutine
+*-------------------------------------------------------------------------
+REPLCE EQU  $
+       MOV  R11,@LEVEL1
+       BL   @BKREPB           Blank buffer.
+       MOV  CURADR,R14        End of first move
+       MOV  @LINADR,R8        Start of data
+       A    @SIX,R8
+       LI   R9,REPBUF         Output buffer
+RADR   EQU  $-2
+REPL10 C    R8,R14            Write text up to string
+       JHE  REPL20
+       MOVB *R8+,*R9+
+       JMP  REPL10            Write replace string
+REPL20 MOV  @RSTRL,R6
+       JEQ  REPL35            JMP IF REPL STRING LENGTH = 0             10-1 JJ
+       MOV  @RSTRNG,R10
+REPL30 MOVB *R10+,*R9+
+       DEC  R6
+       JGT  REPL30
+REPL35 MOV  R9,@MARKER                                                  10-1 JJ
+       DEC  @MARKER
+       A    @STRL,R8          Adjust cursor past find string
+REPL40 C    R8,@LINEND
+       JH   REPL50                                                      10-18 JJ
+       MOVB *R8+,*R9+         Write rest of line.
+       JMP  REPL40
+REPL50 ABS  @WDWRAP           Word wrap mode?
+       JNE  REPL80            Yes, go reformat
+       CLR  @MARKER
+       LI   R14,REPBM6        No, update line.
+RPM6A  EQU  $-2
+       A    @RSTRL,@SREGS+2
+       DEC  @SREGS+2                                                    9-28 JJ
+       A    @RMRG,R14         Blank beyond left margin
+       INC  R14                                                         10-25 JJ
+       BL   @BKRE10
+       MOV  @RADR,@BUFADR
+       MOV  CLINE,@LINENO
+       BLWP @UPDTLN
+       MOV  R0,R0             Error?
+       JNE  PARERR            Yes
+       MOV  @LEVEL1,R11
+       RT                     No, return
+*
+REPL80 EQU  $                 Replace string word wrap mode
+       LI   SRCEND,REPBND
+       CLR  @TOPPAR           Reformat from ALL OF LINE.
+       B    @RENTRY           Go reformat.
+*-------------------------------------------------------------------------
+*      Delete lines with count in eline
+*-------------------------------------------------------------------------
+* optimized to delete last lines first on 4/14/88 ..generally faster -jph
+*
+* dlin05 is entry point with r6 already loaded...used for reformat (edit/3)
+*
+DLINES EQU  $
+       MOV  @ELINE,R6
+DLIN05 SETO @FILCHG           indicate that the file has been changed
+       MOV  @RLINE,R8         get line number to start delete at
+       A    R6,R8             point to last line in delete block
+DLIN10 DEC  R8                down the delete line number counter
+       MOV  R8,@LINENO        line to delete
+       BLWP @DELTLN           do it
+       DEC  R6                down counter
+       JGT  DLIN10             we are not yet done...
+       RT                     and done
+*-------------------------------------------------------------------------
+*      Get lines
+*-------------------------------------------------------------------------
+GETLC  MOV  CLINE,R8
+GETLIN EQU  $
+       MOV  R8,@LINENO
+GETL10 MOV  @LINADR,@BUFADR
+GETL20 BLWP @GETLN
+       MOV  R0,R0
+       JNE  GETL30
+       INCT R11
+GETL30 RT
+*-------------------------------------------------------------------------
+*      Move overlay code from vdp to cpu
+*-------------------------------------------------------------------------
+* MOVEM HAS BEEN MODIFIED TO PULL THE STRING
+*  OUT OF CPU MEMORY. JPH
+MOVEM  EQU  $            Special move for messages
+       LI   R8,CPUSCN    Cpu address
+*      AI   R9,->2000    Adjust address
+*      A    @LBIAS,R9
+       MOV  R11,R14
+       MOVB *R9+,R6
+       SRL  R6,8
+MOVE01 MOVB *R9+,*R8+
+       DEC  R6
+       JGT  MOVE01
+       B    *R14
+
+MOVE   EQU  $
+       MOV  *R11+,R9     CPU FROM address
+       MOV  *R11+,R8     Cpu address
+       MOV  *R11+,R6     Count
+*      AI   R9,->2000    Make address Relative
+*      A    @LBIAS,R9    Add the load bias for vdp address
+       MOV  R11,R14
+*      BL   @VAD         Write address
+MOVE40 MOVB *R9+,*R8+  Write data.
+       DEC  R6
+       JGT  MOVE40
+       B    *R14
+
+* THIS ROUTINE FOR USE BY REF IN LOADSAVE FILE . . . NOT USED WITHIN
+*  THE EDITOR ROUTINES AT THIS TIME -JPH
+MOVE05 MOV  R11,R14
+       BL   @VAD         Write address
+MOVE45 MOVB @VDPRD,*R8+  Write data.
+       DEC  R6
+       JGT  MOVE45
+       B    *R14
+
+*-------------------------------------------------------------------------
+CLRCMD LI   R8,CMDCLR
+       LI   R9,CMDCL
+CLRBUF CLR  *R8+
+       DECT R9
+       JGT  CLRBUF
+       RT
+*-------------------------------------------------------------------------
+*      Check for lower case.
+*----------------------------------------------------------------
+CNVLC  LI   R8,KEYCOD
+CNVLC8 EQU  $                 Translate into lower case
+       MOV  R8,R0             Using r8 as pointer.
+CNVL10 MOVB *R0,R6
+       CB   R6,@H61
+       JL   CNVL20
+       CB   R6,@H7A
+       JH   CNVL20
+       SB   @H20,*R0
+CNVL20 RT
+*----------------------------------------------------------------
+*      Exit routines
+*-------------------------------------------------------------------------
+EXIT0  BL   @UPDATE           make sure current line is saved
+EXIT
+*      CLR  @>8384
+*      CLR  @>8300
+EXIT2
+       MOV  @EOF,@SEOF        STORE INFO FOR LATER.
+       MOV  @TBLND,@STBLND
+       MOV  @EDBFND,@SEBFND
+*      SZCB @MASK,@>83C2      Enable system reset key                   8-24
+       BL   @SAVTAB           copy tab stops into CONTROL area
+       LWPI GPLWS
+*      MOV  @GPLRT,R11
+*      MOVB @GPC,@GROMWA
+*      MOVB @GPC1,@GROMWA
+       B    @>6008            BRANCH INTO THE FORMATTER
+
+MENU0
+PEDIT  LI   R3,SWPROG
+       JMP  MENU
+SDEFLT LI   R3,SWSAVE
+       JMP  MENU
+TEDIT  LI   R3,SWEDIT
+       JMP  MENU
+
+*MENU0  BL   @UPDATE           make sure current line is saved
+MENU
+       MOV  R3,@3*2+>83E0     PUT R3 IN GPLWS R3
+       MOV  @EOF,@SEOF        STORE INFO FOR LATER.
+       MOV  @TBLND,@STBLND
+       MOV  @EDBFND,@SEBFND
+       LWPI GPLWS
+       B    *R3               MENU=REGULAR TEXT EDITOR
+
+*-------------------------------------------------------------------------
+*      KEY CODE TABLE FOR CONTROL KEYS >80 - >98
+*-------------------------------------------------------------------------
+CTBL   EQU  $
+       DATA START        (80) ' KEY                                     7-21
+       DATA ROLLUP       (81) A KEY  Roll up
+       DATA ROLDWN       (82) B KEY  Roll down
+       DATA COMAND       (83) C KEY  center line of text
+       DATA CHDIR        (84) D KEY  change search direction
+       DATA GOREND       (85) E KEY  Up arrow
+       DATA DELCHR       (86) F KEY  Delete character
+       DATA INSCHR       (87) G      Insert character
+       DATA LASTP        (88) H Last paragraph
+       DATA TAB          (89) I TAB
+       DATA NEXTP        (8A) J Next paragraph
+       DATA CTOEOL       (8B) K Clear to end of line
+       DATA HOMCSR       (8C) L Home cursor
+       DATA INDENT       (8D) M Goto column 1.                          7-21
+       DATA DELLIN       (8E) N Delete line
+       DATA INSERT       (8F) O Insert line
+       DATA PAGE         (90) P DELETE CHAR                             7-21
+       DATA START
+       DATA REFRMT       (92) R RIGHT ARROW
+       DATA TABTOG            S GO TO COL 1
+       DATA BACKTB       (94) T BACK TAB
+       DATA CMODE        (95) U CONTROL CHAR MODE                       7-21
+       DATA GOTO1        (96) V Goto col 1
+       DATA TABWD
+       DATA DWNAR             X HELP KEY
+       DATA GOLEFT            Y Dummy blank.
+       DATA OOPS              Z Restore line.
+       DATA START        (9B) .
+       DATA START        (9C) ;
+       DATA EXIT         (9D) =                            formatter
+       DATA INDENT       (9E) 8 New paragraph                           7-21
+       DATA PAGE         (9F) 9 New page
+CTBLND EQU  $
+CTBL2  EQU  $            control keys.
+       DATA WORDW        (B0) 0 WORD WRAP MODE                          7-21
+       DATA OOPS         (B1) 1 OOPS KEY                                7-21
+       DATA REFRMT       (B2) 2 reformat
+       DATA COLORC       (B3) 3 CHANGE COLOR                            7-21
+       DATA NEXTP        (B4) 4 find next paragraph
+       DATA DUPLIC       (B5  5 duplicate previous line
+       DATA LASTP         B6  6 find last paragraph
+       DATA TABWD         B7  7 tab to next word
+CTBL2L EQU  $
+*      KEY CODE TABLE FOR FUNCTION KEYS 0->F
+BTBL   EQU  $-2           Use to be   is
+       DATA TAB          (01) A key   Func 7
+       DATA ROLLUP       (02) C key        4
+       DATA DELCHR       (03) F key        1
+       DATA INSCHR       (04) G key        2
+       DATA COMAND       (05) Q key        =
+       DATA INSERT       (06) R key        8
+       DATA DELLIN       (07) T key        3
+       DATA LFTAR        (08) S key        S
+       DATA RGTAR        (09) D key        D
+       DATA DWNAR        (0A) X key        X
+       DATA UPAR         (0B) E key        E
+       DATA ROLDWN       (0C) V key        6
+       DATA ENTER        (0D) Enter
+       DATA START        (0E) W key        5
+       DATA COMAND       (0F) Z key        9
+BTBLND EQU  $
+*-------------------------------------------------------------------------
+       PAGE
+*
+*
+*
+       EVEN
+
+* THOSE TWO EQUATES HAVE BEEN MOVED TO THEIR OWN BUFFER. BELOW.  JPH
+* CPUSCN EQU  $
+* CTXTM6 EQU  CPUSCN+86
+*-------------------------------------------------------------------------
+*      INITIALIZATION FOR EDITOR
+*      ONLY EXECUTED ONCE.
+*-------------------------------------------------------------------------
+EDIT
+       DATA SCNWS
+       DATA E10
+E10
+INIT   MOVB @FIVE,@KEYBRD     Change to 99/4A keyboard
+       SOCB @MASK,@>83C2      Disable system reset key                  8-24
+       MOV  R11,@LEVEL1
+       CLR  @EOF
+       LI   R0,TBL            No, initialize buffer pointers
+       MOV  R0,@TBLND                                                   7-21
+       LI   R0,EDITBF
+       MOV  R0,@EDBFND                                                  7-21
+
+*      do checksum to fuck over jack's sector editor
+       LI   R0,MJPH
+       INC  R0
+       CLR  R2
+JRCHK1 MOVB *R0+,R1
+       SRL  R1,8
+       A    R1,R2
+       CI   R0,MTAB
+       JNE  JRCHK1
+       MOV  R2,@JRCHCK
+       LI   R0,>07F4          good confusing data for the disKassemblers
+JRCHCK EQU  $-2
+*
+* LOAD THE CHARA1 FILE
+       BLWP @MODE80           set to 80 columns. load chars,
+       DATA 26                use 26.5 line mode
+*
+SKIP1
+       LI   R2,80*27
+       BL   @CLS              clear the screen
+*
+       LI   R0,>1000
+       LI   R1,>F100
+       LI   R2,32
+ENDPC0 BLWP @VSBWEA      SET COLOR TABLE UP RIGHT
+       INC  R0
+       DEC  R2
+       JNE  ENDPC0
+
+       LI   R14,SDEVNM
+       LI   R6,320
+       MOV  @EDTINI,R0   IF THIS IS NOT FIRST TIME
+       JNE  E39           THEN DON'T CLEAR DEVICE NAMES
+       BL   @CLRT10           Clear device name and file name buffers.
+E39
+       LI   R0,SCLR           Clear data
+       LI   R1,CLRLEN
+E40    CLR  *R0+
+       DECT R1
+       JGT  E40
+* CLEAR THE MOVED VARIABLES AS WELL
+       CLR  @BUFADR
+       CLR  @LINENO
+       LI   R1,FORM0          Set up format to default
+       MOV  R1,@FORMAT
+       MOV  *R1+,@LMRG        Left  margin to default
+       MOV  *R1+,@RMRG        Right margin to default
+       MOV  @SSNLEN,@SCNLEN   Screen length default
+       MOV  @LMRG,CURSOR      Cursor to left margin
+       MOV  @CPUADR,@TOPSCN
+       CLR  CLINE
+       CLR  SBIAS
+       CLR  CHAR
+       LI   R0,WTOP
+       MOV  R0,WPTR
+*      SETO @LINF             ...use stored value....                   7-21
+       BL   @WINDOW           Set up window table
+       SETO @WDWRAP           Default is word wrap.
+       SETO @CRFLAG
+       B    @START                                                      7-21
+*
+       EVEN
+
+* CPUSCN AND ITS EQUATES USED TO BE HERE. JPH
+*
+       PAGE
+*-------------------------------------------------------------------------
+*      Command mode key table to be downloaded from vdp.
+*-------------------------------------------------------------------------
+COMTBL DATA START        (80) ' KEY
+       DATA START        (81) A KEY                                     11-22 JJ
+       DATA START        (82) B KEY                                     11-22 JJ
+       DATA COMAND       (83) C KEY
+       DATA CHDIR        (84) D KEY  set search direction
+       DATA GOREND       (85) E KEY  CLR TO TAB
+       DATA DELCHR       (86) F KEY  LINE # MODE
+       DATA INSC40       (87) G      Insert character
+       DATA START        (88) H BACK SPACE
+       DATA TAB          (89) I TAB
+       DATA START        (8A) J DOWN ARROW
+       DATA CTOEOL       (8B) K CLEAR TO END OF LINE
+       DATA START        (8C) L HOME CURSOR
+       DATA CHR0A        (8D) M CARRIAGE RETURN
+       DATA START        (8E) N DELETE LINE
+       DATA START        (8F) O INSERT LINE
+       DATA CHR0C        (90) P DELETE CHAR                             7-21
+       DATA CMDXIT
+       DATA GORMRG       (92) R RIGHT ARROW
+       DATA TABTOG            S GO TO COL 1
+       DATA BACKTB       (94) T BACK TAB
+       DATA CMODE        (95) U CONTROL KEY MODE                        7-21
+       DATA GOTO1        (96) V GOTO COLUMN ONE
+       DATA TABWD
+       DATA START             X HELP KEY
+       DATA START             Y Paragraph indentation key
+       DATA START         9A  Z Nop
+       DATA START         9B
+       DATA START         9C
+       DATA EXIT          9D                               formatter
+       DATA CHR0A         9E (NEW PARA)
+       DATA CHR0C         9F (NEW PAGE)
+COMTND EQU  $
+       DATA WORDW         B0  WORDWRAP MODE.                            7-21
+       DATA START         B1                                            7-21
+       DATA START         B2  REFORMAT
+       DATA COLORC        B3  COLOR CHANGE                              7-21
+       DATA START         B4  NEXTP
+       DATA START         B5  DUPLIC
+       DATA START         B6  LASTP
+       DATA TABWD         B7  TAB BY WORD
+*      KEY CODE TABLE FOR FUNCTION KEYS 0->F
+       DATA TAB          (01) A KEY
+       DATA RLUP05       (02) C KEY                                     10-18 JJ
+       DATA DELCHR
+       DATA INSC40
+       DATA COMAND
+       DATA START        (06) INSERT
+       DATA CLRLIN       (07) T KEY          jph modication for Lou
+       DATA LFTAR        (08)
+       DATA RGTAR        (09)
+       DATA START        (0A)
+       DATA START        (0B)
+       DATA RDWN05       (0C) '56'                                      10-18 JJ
+       DATA ENTER
+       DATA START        (0E) '57'
+       DATA COMAND       (0F)
+COMTL  EQU  $-COMTBL
+DUMY   BSS  >AC-COMTL
+       EVEN
+
+* RELOCATED FROM ABOVE BY JPH
+
+* OVRLAY
+CPUSCN EQU  >F600        RESERVE ABOUT 2.5K. THAT _HAS_ TO BE ENOUGH. JPH
+CTXTM6 EQU  CPUSCN+86
+CTEXT  EQU  CPUSCN+92         START OF COMMAND MODE TEXT
+CTXTND EQU  CTEXT+80
+CPUSND EQU  CPUSCN+2064       END OF SCREEN BUFFER.
+TEMPM6 EQU  CPUSCN+2064
+TEMPBF EQU  CPUSCN+2064+6
+TEMPND EQU  TEMPBF+79
+REPBM6 EQU  TEMPND+1     Used by replace routine
+REPBUF EQU  REPBM6+6
+REPMID EQU  REPBUF+79
+REPBND EQU  REPBUF+159
+
+OVRLAY BSS  2     PROBABLY NOT AN INTELLIGENT MOVE -JPH    (worked @ 100..)
+*-------------------------------------------------------------------------
+

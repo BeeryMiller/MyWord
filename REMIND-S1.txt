@@ -1,0 +1,132 @@
+* check for any reminders . . . .
+*
+*COPYRT TEXT 'COPYRIGHT 1988 J. PETER HODDIE' 30 characters
+COPYRT TEXT 'WHAT'
+       EVEN
+*
+MINPAB DATA >0014,VDPPAB+80,>5050,0,12
+       TEXT 'DSK1.'
+DATE   TEXT '06/1987'
+       EVEN
+*
+MINNUM LI   R1,'00'           default value
+       MOVB *R8+,R1           get first digit
+       SWPB R1
+       CB   *R8,@H20          space?
+       JEQ  MIND50
+       MOVB *R8+,R1           get other digit
+       SWPB R1                 order counts
+MIND50 MOV  R1,R0             a copy
+       RT
+*
+MIND01
+* first install the default month
+       LI   R0,80*26-16       point to month shown on screen
+       LI   R1,DATE
+       LI   R2,2
+       BLWP @VMBREA           read in the correct date . . .
+* default year
+       MOV  @>801C,R0         get the year digits
+       ANDI R0,>0F0F
+       ORI  R0,>3030          as ascii characters
+       MOVB R0,@DATE+6        ones digit
+       SWPB R0
+       MOVB R0,@DATE+5        tens digit
+* now scan the input line for assorted (sordid?) data
+       BL   @SKIPBK           point to first non-blank character on line
+       C    R8,@CTXEND        nothing?
+       JEQ  MIND60            yip, so just show today
+*      CB   *R8,@COPYRT
+*      JNE  MIND51
+*      CLR  R0
+*      LI   R1,COPYRT
+*      LI   R2,30
+*      BLWP @VMBWEA
+*MIND58 DEC  R0
+*      JNE  MIND58
+MIND51 BL   @MINNUM           get a 2 digit number, somehow
+       MOV  R1,R10            save first number . . .
+       MOV  R1,@TMDATE
+       BL   @SKIP10           look for next character
+       C    R8,@CTXEND        done?
+       JEQ  MIND62            yes, just one day
+MIND52 BL   @MINNUM           go get next number
+       MOV  @TMDATE,R1        recall what is now the month
+       MOV  R0,@TMDATE        install correct day
+       MOVB R1,@DATE
+       SWPB R1
+       MOVB R1,@DATE+1        install correct month
+       BL   @SKIP10           see if a third number exists
+       C    R8,@CTXEND        done?
+       JEQ  MIND62            yes, go finish day parsing . .
+       MOVB *R8+,@DATE+5      tens of year
+       MOVB *R8,@DATE+6       ones of year
+       JMP  MIND62
+*
+MIND60 LI   R0,80*26-13       point to day shown on screen
+       LI   R1,TMDATE
+       LI   R2,2
+       BLWP @VMBREA           load ascii of day into r0
+*
+MIND62 LI   R0,0
+TMDATE EQU  $-2
+       ANDI R0,>0F0F          save important bits
+       MOV  R0,R1             save copy
+       SRL  R1,8              as a word
+       MPY  @D10,R1
+       ANDI R0,>000F
+       A    R0,R2             r2=date
+       SWPB R2
+       MOVB R2,R10            save that for later compares . . .
+*
+       LI   R0,VDPPAB
+       LI   R1,MINPAB
+       LI   R2,40
+       BLWP @VMBWEA
+       AI   R0,9
+       MOV  R0,@>8356
+       BLWP @DSR$
+       JNE  MIND63
+       B    @VF90             error on open means just surrender
+*
+MIND63 BL   @CLS              it opened . . so clear screen
+*
+       LI   R0,VDPPAB
+       MOVB @READ,R1
+       BLWP @VSBWEA           change to read
+*
+MIND10 LI   R0,VDPPAB+9
+       MOV  R0,@>8356
+       BLWP @DSR$
+       JEQ  MINDEX            error
+       LI   R0,VDPPAB+1
+       BLWP @VSBREA
+       SRL  R1,13             error?
+       JNE  MINDEX             yup
+       LI   R0,VDPPAB+5
+       BLWP @VSBREA
+       SRL  R1,8              length as a word
+       LI   R0,VDPPAB+80
+       MOV  R1,R2
+       LI   R1,LINBUF
+       BLWP @VMBREA           read in the record
+       CB   *R1,R10           is it today's info?
+       JNE  MIND10            not today
+       INC  R1                don't show date byte
+       DEC  R2                down length counter
+       JEQ  MIND12            don't blow up on a null
+       LI   R0,23*80
+       BLWP @VMBWEA           show it
+MIND12 BLWP @SCRLL            scroll
+       JMP  MIND10            and continue looping
+*
+MINDEX LI   R0,VDPPAB
+       LI   R1,>0100
+       BLWP @VSBWEA
+       AI   R0,9
+       MOV  R0,@>8356
+       BLWP @DSR$
+*
+       B    @VF99             eof message and enter to continue
+*
+***************************************

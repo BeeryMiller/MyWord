@@ -1,0 +1,58 @@
+MUSIC  LI   R5,SLIST
+       MOVB @H90,@>8400
+       MOV  R3,R7             r3 is passed in basic delay
+*
+MUSIC2 LI   R3,1
+       MOV  *R5+,R1
+       JEQ  MUSICX
+       JLT  MUSIC3
+       MOV  R1,R3             note length multiplier
+       MOV  *R5+,R1           get tone
+MUSIC3 MOVB R1,@>8400
+       SWPB R1
+       MOVB R1,@>8400
+       MOVB @H90,R2
+       MPY  R7,R3             put delay into R4
+MUSIC6 MOVB R2,@>8400
+       MOV  R4,R3
+MUSIC7 DEC  R3
+       JNE  MUSIC7
+       AI   R2,>0100
+       CB   R2,@H9F
+       JNE  MUSIC6
+       JMP  MUSIC2
+*
+MUSICX MOVB @H9F,@>8400
+       RT
+*
+H90    BYTE >90
+H9F    BYTE >9F
+       EVEN
+*
+SLIST  DATA >8C1A,>8D17
+*
+       DATA 2,>8816,>8D17,>8C1A
+       DATA 2,>851C,2,>8C1A
+*
+       DATA >8D17,>8C1A,>851C,>8C1F
+       DATA >8B23,>8128,>8F2C,>8A2F
+*
+       DATA >8F2C,>8B23,>8128,>8F2C
+       DATA >8A2F,>8128,>8F2C,>8A2F
+*
+       DATA >8735,>8A38,>8735,>8A2F
+       DATA >8F2C,>8128,>8B23,>8C1F
+*
+       DATA 2,>801E,>8B21,>8B23
+       DATA 2,>8128,2,>8F2C
+*
+       DATA >8A2F,>8F2C,>8128,>8B23
+       DATA >8B21,>801E,>8C1A,>8D17
+*
+       DATA 2,>8816,>8D17,>8C1A
+       DATA >801E,>8B21,>8B23,>8128
+*
+       DATA 6,>8F2C
+*
+       DATA 0
+*

@@ -1,0 +1,44 @@
+*      Branch to routines...
+MYWORD EQU  >6000
+
+
+QUIT   EQU  >600C
+CLS    EQU  >6014
+*      BLWP to routines....
+MODE32 EQU  >6018
+MODE40 EQU  >601C
+MODE80 EQU  >6020
+CHARS  EQU  >6024
+*KSCAN  EQU  >6028
+VSBW   EQU  >602C
+VMBW   EQU  >6030
+VSBR   EQU  >6034
+VMBR   EQU  >6038
+VWTR   EQU  >603C
+DSRLNK EQU  >6040
+VMBWD  EQU  >6050
+GETPTR EQU  >6054
+GETKEY EQU  >6058
+SAVIMG EQU  >605C
+*      vectors returned by GETPTR routine
+
+MAPPER EQU  0                 address of hardware map registers
+MGRPAG EQU  2                 address of page to map memory manager routines in
+MVDPWA EQU  4                 vdpwa
+MVDPWD EQU  6                 vdpwd
+MVDPRD EQU  8                 vdprd
+PAGLST EQU  10                list of pages used in myword...
+VOLLEN EQU  12                length of load volume name <work>
+VOLUME EQU  14                load volume name, null terminated
+BUFADR EQU  16                80 byte buffer pointer for bufmgr
+EOF    EQU  18                pointer to last line number in buffer
+INSTLN EQU  20                blwp routine to insert line
+UPDTLN EQU  22                blwp routine to update line
+DELTLN EQU  24                blwp routine to delete line
+GETLN  EQU  26                blwp routine to get line
+LINENO EQU  28                pointer to line number for bufmgr to work on
+LINBUF EQU  30                100 byte buffer to communicate w/ buffer manager
+CURCUR EQU  32                current cursor column . . .  (value, not ptr)
+CURLIN EQU  34                current line in the file . . . (value, not ptr)
+UNICOL EQU  36                byte is users default color selection...
+*

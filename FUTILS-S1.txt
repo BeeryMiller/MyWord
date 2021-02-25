@@ -1,0 +1,80 @@
+XMLLNK DATA UTILWS,XMLLN0
+KSCAN  DATA UTILWS,KSCAN0
+VSBW   DATA UTILWS,VSBW0
+VMBW   DATA UTILWS,VMBW0
+VSBR   DATA UTILWS,VSBR0
+VMBR   DATA UTILWS,VMBR0
+VWTR   DATA UTILWS,VWTR0
+
+UTILWS BSS  32
+AK     BSS  2
+AR     EQU  2*2+1+UTILWS LOW BYTE OF R2 OF UTILWS
+
+XMLLN0
+       MOV  *R14+,@>83E2
+       LWPI >83E0
+       MOV  R11,@AK
+       MOV  R1,R2
+       CI   R1,>8000
+       JH   AL
+       SRL  R1,12
+       SLA  R1,1
+       SLA  R2,4
+       SRL  R2,11
+       A    @>0CFA(R1),R2
+       MOV  *R2,R2
+AL     BL   *R2
+       LWPI UTILWS
+       MOV  R11,@>83F6
+       RTWP
+
+KSCAN0
+       LWPI >83E0
+       MOV  R11,@AK
+       BL   @>000E
+       LWPI UTILWS
+       MOV  R11,@>83F6
+       RTWP
+
+VSBW0
+       BL   @AM
+       MOVB @>0002(R13),@>8C00
+       RTWP
+
+VMBW0
+       BL   @AM
+AN     MOVB *R1+,@>8C00
+       DEC  R2
+       JNE  AN
+       RTWP
+
+VSBR0
+       BL   @AO
+       MOVB @>8800,@>0002(R13)
+       RTWP
+
+VMBR0
+       BL   @AO
+AP     MOVB @>8800,*R1+
+       DEC  R2
+       JNE  AP
+       RTWP
+
+VWTR0
+       MOV  *R13,R1
+       MOVB @>0001(R13),@>8C02
+       ORI  R1,>8000
+       MOVB R1,@>8C02
+       RTWP
+
+AM     LI   R1,>4000
+       JMP  AQ
+AO     CLR  R1
+AQ     MOV  *R13,R2
+       MOVB @AR,@>8C02
+       SOC  R1,R2
+       MOVB R2,@>8C02
+       MOV  @>0002(R13),R1
+       MOV  @>0004(R13),R2
+       B    *R11
+

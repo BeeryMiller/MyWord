@@ -1,0 +1,75 @@
+       DEF  ESAVE
+
+       REF  DSRLNK
+       REF  VSBW,VMBW
+       REF  VSBR,VMBR
+
+       AORG >2A00
+
+PAB    EQU  >800
+PABBUF EQU  PAB+>40
+PABDAT DATA >0600,PABBUF,0,>2FFF,11
+       TEXT 'DSK2.EDITOR'
+       EVEN
+HEADER DATA 0,>2FFF,>A000
+SAVR11 DATA 0
+WS     BSS  32
+*
+PABDA1 DATA >0600,PABBUF,0,>1000,12
+       TEXT 'DSK2.CONTROL'
+       EVEN
+HEADE1 DATA 0,>1000,>6000
+
+ESAVE
+       MOV  R11,@SAVR11
+
+       LWPI WS
+
+       LI   R0,PAB
+       LI   R1,PABDAT
+       LI   R2,>40
+       BLWP @VMBW
+       AI  R0,9
+       MOV  R0,@>8356
+
+       LI   R0,PABBUF
+       LI   R1,HEADER
+       LI   R2,6
+       BLWP @VMBW
+
+       LI   R0,PABBUF+6
+       LI   R1,>A000
+       LI   R2,>3000
+       BLWP @VMBW
+
+       BLWP @DSRLNK
+       DATA 8
+
+* AND NOW CONTROL..
+
+       LI   R0,PAB
+       LI   R1,PABDA1
+       LI   R2,>40
+       BLWP @VMBW
+       AI  R0,9
+       MOV  R0,@>8356
+
+       LI   R0,PABBUF
+       LI   R1,HEADE1
+       LI   R2,6
+       BLWP @VMBW
+
+       LI   R0,PABBUF+6
+       LI   R1,>6000
+       LI   R2,>1000
+       BLWP @VMBW
+
+       BLWP @DSRLNK
+       DATA 8
+*
+       LWPI >83E0
+       MOV  @SAVR11,R11
+       B    *R11
+*
+       END
+*

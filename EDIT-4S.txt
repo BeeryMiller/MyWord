@@ -1,0 +1,739 @@
+       BL   @CLRCMD
+       BL   @WINDOW
+       BL   @MOVE
+       DATA CTBL$
+       DATA CTBL              TRYING TO GET IT TO COPY KEYCODES
+       DATA COMTL
+       JMP  COMA20
+*-------------------------------------------------------------------------
+*      The following commands are executed from code
+*      which is downloaded from VDP and overlays the
+*      Cpu buffer (Beyond the CTEXT line).  It is important that
+*      the REFRSH flag is never cleared during execution, otherwise
+*      The screen handler will get lines into the cpu buffer, and
+*      Destroy the code.
+*-------------------------------------------------------------------------
+VFTXT  BYTE 26
+       TEXT 'VIEW FILE, enter filename:'
+UTTXT  BYTE 29
+       TEXT 'UTILITY FILE, enter filename:'
+MINDTX BYTE 21
+       TEXT 'REMINDER, enter date:'
+       EVEN
+TINTER INV  @INTER            toggle the interlace flag
+       BLWP @MODE80           reset 80 column mode
+       DATA 26                in 26.5 line mode
+       B    @COMAND           and continue onward
+PURGE  BL   @DISPLY
+       DATA PG
+       DATA MPG
+       B    @GETKEY
+PG     MOV  R11,R10
+       BL   @NULFIL           zero out the saved filename...then do it
+       LI   R15,PG01          Purge file
+       MOV  R10,R11
+       JMP  LOAD20
+QFX    LI   R15,QF01
+       JMP  LOAD20
+DF     LI   R15,DF01          Delete file
+       JMP  LOAD20
+PFX    LI   R15,PF01          Print file
+       JMP  LOAD20
+SD     LI   R15,SD01          Show directory
+       JMP  LOAD20
+SVX    LI   R15,SAVE01        Save file
+       JMP  LOAD20
+REMIND BL   @DISPLY
+       DATA MIND00
+       DATA MINDTX
+       JMP  SV3
+MIND00 LI   R15,MIND01
+       JMP  LOAD20
+UT     BL   @DISPLY
+       DATA UT00
+       DATA UTTXT
+       JMP  SV3               don't use buffered filename
+UT00   LI   R15,UT01
+       JMP  LOAD20
+VF     BL   @DISPLY
+       DATA VF00
+       DATA VFTXT
+       JMP  SV3               don't use buffered filename
+VF00   LI   R15,VF01
+       JMP  LOAD20
+LF     BL   @DISPLY                                                     7-21
+       DATA LF00                                                        7-21
+       DATA MLF                                                         7-21
+       JMP  SV2                                                         7-21
+LF00   LI   R15,LOAD01        Load file                                 7-21
+LOAD20 SETO @OVRL
+       B    *R15
+
+SV     BL   @DISPLY
+       DATA SVX
+       DATA MSV
+SV2    BL   @RESFIL
+SV3    B    @GETKEY
+PF     BL   @DISPLY
+       DATA PFX
+       DATA MPF
+       BL   @RESDEV
+       JMP  SV3
+QF     LI   R8,CTEXT
+       CB   *R8,@S
+       JEQ  SV
+       CB   *R8,@TE
+       JNE  PG2
+       B    @>600C            REALLY GET OUT!
+PG2    CB   *R8,@P
+       JEQ  PURGE
+       B    @ERRMSG
+*
+* help screens
+*
+HELP1  CLR  R0
+       JMP  HELPGO
+HELP2  LI   R0,1
+       JMP  HELPGO
+HELP3  LI   R0,2
+       JMP  HELPGO
+HELP4  LI   R0,3
+HELPGO MOVB @>8001,R15
+       MOVB @CATPAG,@>8001
+       BLWP @>200C            do help
+HELPG5 MOVB R15,@>8001
+       SRL  R0,8              get keypress in lsb
+       CI   R0,>000F          did they hit back?
+       JEQ  HELPG9            yup..so put up a command bar
+       B    @CMDXIT           no, so just go back to editing....
+HELPG9 B    @COMAND           command mode
+*
+SETPTH MOVB @>8001,R15
+       MOVB @CATPAG,@>8001
+       BLWP @>2014            goto set path routine
+       LI   R0,>0F00          we want to go to the command bar
+       JMP  HELPG5            and we're done.
+*
+NULFIL LI   R8,SFILNM
+       LI   R9,80             80 chars to blank
+NULFI1 MOVB @BLANK,*R8+       null out buffered filename on Purge
+       DEC  R9                done?
+       JNE  NULFI1             nope
+       RT
+*
+RESFIL LI   R8,SFILNM
+RESF03 LI   R9,CTEXT
+RESF05 LI   R6,80
+RESF10 MOVB *R8+,*R9+
+       DEC  R6
+       JGT  RESF10
+       RT
+SAVDEL LI   R9,SDELIN
+SDELA  EQU  $-2
+       LI   R8,6
+       A    @LINADR,R8
+       JMP  RESF05                                                      7-21
+SAVFIL LI   R9,SFILNM
+SAVF10 LI   R8,CTEXT
+       JMP  RESF05
+SAVFRT LI   R9,SPRMPT
+       JMP  SAVF10
+RESFRT LI   R8,SPRMPT
+       JMP  RESF03
+RESDEV
+       LI   R8,SDEVNM
+       JMP  RESF03
+SAVDEV LI   R9,SDEVNM
+       JMP  SAVF10
+       PAGE
+*-------------------------------------------------------------------------
+*      SHOW LINE
+*-------------------------------------------------------------------------
+SL
+       BL   @NUM
+       BL   @REST10
+       MOV  R12,CLINE
+SL1    MOV  CLINE,SBIAS
+       B    @CMDX10
+
+*------------------------
+* GOTO LINE 1, COLUMN 1
+*------------------------
+LINE1
+       CLR  @CRFLAG
+       CLR  @TOPPAR
+       BL   @UPDATE           save current line edits
+
+       CLR  CURSOR            goto column 1
+       CLR  CLINE             goto row 1
+       JMP  SL1               continue as above example
+*-------------------------------------------------------------------------
+*      DELETE LINE AND CMDXIT ROUTINE FOR COPY LINE, AND MOVE LINE
+*-------------------------------------------------------------------------
+DL
+       BL   @NUM              Start line?
+       MOV  R12,@RLINE
+       BL   @NUMBER           Stop line
+       MOV  R12,@ELINE
+       S    @RLINE,@ELINE     Count for delete lines
+       JLT  BERR2
+*      JEQ  BERR2             Invalid line numbers
+       INC  @ELINE
+       BL   @DLINES           delete lines
+       B    @CMDXIT             exit command mode
+BERR2  B    @ERRMSG
+       PAGE
+*-------------------------------------------------------------------------
+*      MOVE LINES START LINE, STOP LINE, AFTER LINE?
+*-------------------------------------------------------------------------
+ML     EQU  $
+       BL   @CPY              Copy lines
+       C    @RLINE,@WLINE     Start line < After line?
+       JLT  ML10              Yes, ok.
+       A    @ELINE,@RLINE     No, Start line bumped by count
+ML10   BL   @DLINES           Delete lines
+ML20   B    @CMDXIT             Exit command mode
+*-------------------------------------------------------------------------
+*      Copy lines from start line thru stop line, after line?
+*-------------------------------------------------------------------------
+CL     LI   R11,CMDXIT
+CPY    EQU  $
+       MOV  R11,@LEVEL1
+       BL   @NUM
+       MOV  R12,@RLINE        Start line, or read line #
+       BL   @NUMBER
+       MOV  R12,@ELINE        Stop line # will be count
+       BL   @NUMBER
+       A    R0,R12            Inc R12 unless line no 0.
+       MOV  R12,@WLINE        After line # write line #
+       C    R12,@ELINE        After line > stop line?
+       JGT  CPY10             Yes, ok.
+       C    R12,@RLINE        No, is after line < start line?
+       JLT  CPY10             No, ok
+       JEQ  CPY10             NO, OK REFLECT INCREMENTED R12            11-11 JJ
+       JMP  BERR2              Illegal line numbers
+CPY10
+       S    @RLINE,@ELINE
+       JLT  BERR2
+       INC  @ELINE
+       MOV  @RLINE,R9
+       MOV  @ELINE,R6
+CPY15
+       MOV  R9,R8             R8 = line number for getln
+       BL   @GETLIN           Get line from edit buffer
+       JMP  CPY30             Eof error
+       C    @WLINE,@RLINE     After line > Start line?
+       JGT  CPY20             Yes
+       INC  R9                No, bump rline.
+CPY20
+       MOV  R12,@LINENO       After line # = insert line number
+       BL   @INSL40
+       INC  R9
+       INC  R12               Bump wline.
+       DEC  R6
+       JGT  CPY15
+CPY30
+       MOV  @LEVEL1,R11       Return
+       RT
+*      Recover Edit                                                     7-21
+RE     EQU  $                                                           7-21
+*      LI   R8,CTEXT          Scan line for Yes                         10-15 JJ
+       BL   @SKIPBK                                                     7-21
+       CB   *R8,@Y            Not a Yes                                 7-21
+       JNE  RE10                                                        7-21
+       LI   R0,TBL            Check legality of pointers.
+       C    @STBLND,R0        table end beyond table?
+       JH   RE10              Yes
+       ABS  @SEOF             No, make sure line count > 0
+       LI   R0,EDITBF
+       C    @SEBFND,R0        Table start before table?
+       JL   RE10              Yes
+       MOV  @SEOF,@EOF        No, go ahead and try to                   7-21
+       MOV  @STBLND,@TBLND    recover.                                  7-21
+       MOV  @SEBFND,@EDBFND                                             7-21
+RE10   B    @CMDXIT                                                     7-21
+       PAGE                                                             7-21
+*-----------------------------
+* CHANGE WILDCARD
+*-----------------------------
+WC
+       CLR  R12               @@ should be using SKIPBK routine . . .
+       LI   R8,CTEXT
+WC10   MOVB *R8+,R12          start with command line text
+       CI   R8,CTEXT+70       end of line?
+       JH   RE10              yup
+       CI   R12,' '*256       space?
+       JEQ  WC10              yup, keep lokin'
+       MOVB R12,@WILDCD       update wild card character
+       JMP  RE10              and exit command mode
+
+*-------------------------------------------------------------------------
+*      Replace string command
+*-------------------------------------------------------------------------
+RS     EQU  $
+       BL   @DISPLY
+       DATA RS00
+       DATA MRS
+       BL   @RESFRT
+       CLR  @UPCASE           Allow lower case
+       B    @GETKEY
+
+RS00   BL   @SAVFRT
+       LI   R8,CTEXT          Start with ctext
+       SETO @VRFY
+       SETO @RSFLAG           CHECK FOR 3 DELIMITERS                    9-28 JJ
+       BL   @PARSE            Parse input string  LABEL DELETED         9-28 JJ
+       BL   @RESTAB
+RS10   BL   @FSSUB            Find string
+       JMP  RS80              End of file exit
+       ABS  @VRFY             String found, verify?
+       JNE  VERFY             Yes, go their
+RS20   BL   @REPLCE           No, replace string
+       JMP  RS10
+RS80   B    @CMDXIT
+RSERR  B    @ERRMSG
+
+VERFY  EQU  $
+       MOV  @SIX,@LMRG
+       MOV  @D85,@RMRG
+       LI   R8,MVRFY          Set up line table to display
+       MOV  R8,@LINTBL        message
+       LI   R8,CTXTM6
+       MOV  R8,@LINTBL+2
+       BL   @REST10           restore workspace with out losing it
+       LI   R9,VERRT          Return address after answer
+       MOV  R9,@PROMPT
+       INCT CLINE             Fake cursor to real line
+       SETO @HILGT            turn on hi-light
+       B    @COMA20           Get answer
+
+VERRT  EQU  $
+       CLR  @HILGT            turn off hi-light
+       BL   @RESTLA
+       BL   @REST10
+       BL   @CNVLC            Convert lower case
+VERR05 CB   *R8,@Y            answer Yes?
+       JEQ  RS20              Go replace string
+       CB   *R8,@N            No, go find next string
+       JNE  VERR10
+       A    @STRL,@SREGS+2
+       DEC  @SREGS+2                                                    10-15 JJ
+       JMP  RS10
+VERR10 CB   *R8,@S
+       JEQ  RS80
+       CB   *R8,@A            All, get out of verfy mode
+       JEQ  VERR12            and replace all strings.
+       CB   *R8,@CONTD        change search direction?????
+       JNE  VERR11            nope
+       BL   @CHDIR            change the direction
+       JMP  VERFY             and wait for another key
+VERR11 CB   *R8,@H0F
+       JNE  VERFY
+       JMP  RSERR
+VERR12 LI   R9,LINTBL
+       CLR  *R9+
+       CLR  *R9+
+       CLR  @VRFY
+       JMP  RS20
+
+*-------------------------------------------------------------------------
+*      Find string processor
+*-------------------------------------------------------------------------
+FSTEXT TEXT '     Stop at this string (Yes or Next)? '
+       TEXT '                                        '
+FS
+       BL   @DISPLY
+       DATA FS00
+       DATA MFS
+       BL   @RESFRT
+       CLR  @UPCASE           Allow lower case.
+       B    @GETKEY
+FS00   EQU  $
+       BL   @SAVFRT
+       LI   R8,CTEXT          Parse starting with ctext
+       BL   @PARSE            (all parameters set up)
+       BL   @RESTAB
+FS02   BL   @FSSUB
+       JMP  FS04
+       DEC  @CNT              Count for find string
+       JGT  FS03              Not done.
+* WE FOUND THE STRING. STOP AND TAKE A LOOK.
+FSVER0 MOV  @SIX,@LMRG
+       MOV  @D85,@RMRG
+       LI   R8,FSTEXT
+       MOV  R8,@LINTBL
+       LI   R8,CTXTM6
+       MOV  R8,@LINTBL+2
+       BL   @REST10
+       LI   R9,FSVER
+       MOV  R9,@PROMPT
+       INCT CLINE
+       SETO @HILGT            turn hi-light on
+       B    @COMA20
+
+FSVER  BL   @RESTLA
+       CLR  @HILGT            turn hi-light off
+       BL   @REST10
+       BL   @CNVLC
+       CB   *R8,@Y
+       JEQ  FSVER1
+       CB   *R8,@N
+       JEQ  FS02
+       CB   *R8,@CONTD        change direction?
+       JNE  FSVER0            nope . . wait for another key
+       BL   @CHDIR0           yup (entry point after faked return address)
+       JMP  FSVER0
+FSVER1 B    @CMDXIT
+FS03   INC  @SREGS+2          Otherwise we'll find it again.
+       JMP  FS02
+FS04
+EOFXIT BL   @REST10
+       B    @CMDX10           Skip rest ws, and exit
+
+       PAGE
+*-------------------------------------------------------------------------
+*      Subroutine to find a string. 2 exits.
+*-------------------------------------------------------------------------
+
+HILGT  DATA 0                 hi-light flag. 0=no. <>0 is yes.
+* WILDCD TEXT '|'          WILDCARD CHARACTER  (moved into CONTROL)
+CVTCAS BYTE >FF          IGNORE CASE? 0=NO. 0<>YES
+CVTBUF BYTE 0            CONVERT CHARACTER BUFFER
+CSMAA  TEXT 'a'
+CSMAZ  TEXT 'z'
+CVTOFF BYTE 'a'-'A'
+CONTD  BYTE >84               key press to change direction in FS y/n above
+       EVEN              THIS SHOULD REALLY BE MOVED
+
+FSSUB
+       LI   R14,>581          Inc cline instruction (default to forward)
+       MOV  @DIRECT,@DIRECT   forward?
+       JEQ  FS05              yup
+       LI   R14,>601          Dec cline instruction (backwards)
+FS05   MOV  R11,@LEVEL1
+       BL   @REST10           Restore pointers to start search
+       INC  CURSOR
+       MOV  @LINADR,CURADR    Calc current cursor address
+       A    CURSOR,CURADR
+FS10
+       C    CURADR,@COLSTA    Cursor address < column start?
+       JLT  FS18              Yes
+       C    CURADR,@COLEND    No, Cursor addr > column end?
+       JLE  FS20              No, ok                                    10-15 JJ
+FS14   X    R14               Yes, read next line
+       MOV  CLINE,CLINE       If decrement cline gets
+       JGT  FS18              less than one, this is
+       CLR  CLINE             eof error.
+       JMP  FS44
+FS18   MOV  @COLSTA,CURADR    Restore cursor addr to start
+FS20   MOV  CLINE,@LINENO     Read line
+       BL   @GETL10           Get line.
+       JMP  FS44              End of file
+* CONVERT THE SEARCH STRING TO UPPER CASE BEFORE COMPARE.
+       MOV  @STRING,R9        pointer to string to match
+       MOV  @STRL,R10         byte count for string
+       JEQ  FS24              beware the null string
+FS21   CB   *R9,@CSMAA
+       JLT  FS22              too low
+       CB   *R9,@CSMAZ
+       JGT  FS22              too high
+       SB   @CVTOFF,*R9       offset
+FS22   INC  R9
+       DEC  R10
+       JNE  FS21
+
+* NOW START ACTUAL SEARCH
+FS24   MOV  CURADR,R10        R10 -> string in text
+FS28   MOV  @STRING,R9        R9 -> command string to match
+       MOV  R9,@LOADS
+       A    @STRL,@LOADS      LOADS = address of end of string
+FS30   C    R9,@LOADS         End of string?
+       JEQ  FS40              Yes, found a match
+       C    R10,@COLEND       No, end of text?
+       JH   FS14              Yes, go get next line
+FS34   MOVB *R10+,@CVTBUF     GET CHARACTER
+*      MOVB @CVTCAS,@CVTCAS   DO WE CONVERT IT?
+*      JEQ  FS62              NO CONVERT
+       CB   @CVTBUF,@CSMAA
+       JLT  FS62              TOO LOW
+       CB   @CVTBUF,@CSMAZ
+       JGT  FS62              TOO HIGH
+       SB   @CVTOFF,@CVTBUF   CONVERT IT
+FS62
+       CB   *R9+,@WILDCD      IS IT A WILD CARD?
+       JEQ  FS30              WILDCARD MATCH
+FS60   CB   @CVTBUF,@-1(R9)   Byte match?
+       JEQ  FS30              Yes, check next one
+       INC  CURADR            No, bump start of text string
+       JMP  FS24              Start over.
+FS40   EQU  $                 Found a matching string
+       MOV  CLINE,SBIAS
+       MOV  CURADR,CURSOR
+       S    @LINADR,CURSOR    Calculate new cursor position
+       BL   @SAVEWS
+       INCT @LEVEL1
+FS44   MOV  @LEVEL1,R11
+       RT
+*-------------------------------------------------------------------------
+*      DISPLAY HANDLING ROUTINE
+*-------------------------------------------------------------------------
+DISPLY
+       CLR  @RSFLAG                                                     9-28 JJ
+       CLR  @LINTBL           Make sure we display this stuff
+       CLR  @LINTBL+2
+       LI   R6,C24-2          Set up pointers for command mode
+       MOV  R6,@SCNLEN        display stuff.
+       LI   R6,CPUSCN
+       MOV  R6,@TOPSCN
+       LI   R10,86*2
+       A    R10,@TOPSCN       Adjust top of screen value
+DISP05 MOV  R6,R9
+DISP10 MOVB @BLANK,*R6+       Blank out display buffer
+       DEC  R10
+       JGT  DISP10
+       MOV  *R11+,@CMDRT      Return address of command
+       MOV  *R11+,R9          Message address
+       B    @MOVEM            GET DATA FROM VDP OVERLY
+       PAGE
+*-------------------------------------------------------------------------
+*      NUMBER SCANNING ROUTINE
+*      R8 -> START OF TEXT, CHANGED TO NEXT FIELD UPON LEAVING
+*      R12 <- LINE NUMBER IN HEX
+*-------------------------------------------------------------------------
+NUM
+       LI   R8,CTEXT     INITIALIZE NUMBER POINTER
+NUMBER
+       MOV  R8,R9
+       CLR  R12          R12 = NUMBER
+       CLR  R6
+       CB   *R8+,@TE     END OF FILE NUMBER?
+       JEQ  NUM45        YES
+       DEC  R8           NO
+NUM10  INC  R6
+       CI   R6,5
+       JGT  BERR3
+       CB   *R8,@BLANK   TERMINATE FIELD BY BLANK?
+       JEQ  NUM20
+       CB   *R8,@SLASH
+       JEQ  NUM20        TERMINATE FIELD BY SLASH?
+       CB   *R8,@COMMA
+       JEQ  NUM20
+       CB   *R8,@RPAREN  RIGHT PARENTHESIS
+       JEQ  NUM20
+       CB   *R8+,@LPAREN  TERMINATE FIELD BY COMMA?
+       JNE  NUM10
+NUM20
+       CI   R6,1
+       JLE  BERR3        ILLEGAL NUMBER, TOO SMALL
+       DECT R6
+       SLA  R6,1         CALCULATE INDEX FOR CONVERSION
+       CLR  R12
+       MOV  R9,R8        POINT TO ASCII NUMBER
+NUM40
+       MOVB *R8+,R9      CONVERT DEC ASCII TO HEX
+       SRL  R9,8
+       AI   R9,->30
+       CI   R9,9         NUMBER OUT OF RANGE, NOT DECIMAL
+       JGT  BERR3
+       MOV  R9,R9        NUMBER < 0?
+       JLT  BERR3        NOT A LEGAL NUMBER.
+       MPY  @TEN(R6),R9
+       A    R10,R12
+       DECT R6
+       JGT  NUM40
+       JEQ  NUM40
+       C    R12,@EOF
+       JLT  NUM50
+       JEQ  NUM50        JUMP IF = EOF  11-17 JJ                        11-17 JJ
+       ABS  @COLNUM
+       JNE  NUM50
+       JMP  BERR3        ERROR IF PAST EOF  11-17 JJ                    11-17 JJ
+NUM45  MOV  @EOF,R12
+NUM50  CLR  R0           Flag if user enterred in line 0
+       MOV  R12,R12
+       JEQ  NUM60
+       INC  R0
+       DEC  R12
+NUM60  INC  R8           R8 -> Next field
+       RT                returns with number in R12 (-1)
+BERR3  B    @PARERR      CLR COLNUM THEN ERRMSG                         11-17 JJ
+       PAGE
+*------------------------------------------------------------
+*      SHOW TABS
+*      TABS OFF
+*------------------------------------------------------------
+TABTOG CLR  R11               r11=0 means entry via keypress
+       MOV  @TABSTA,@TABSTA   are tabs on?
+       JEQ  TABOFF            yes, so turn em' off...
+*
+TABON  CLR  @TABSTA
+TABONX MOV  R11,R11
+       JNE  TABONQ            entry was via command line...
+       B    @START            entry was via key press
+TABONQ B    @CMDXIT
+*
+TABOFF SETO @TABSTA
+       LWPI TEMPWS            temp ws
+       LI   R9,24*80+>4000    @@ could be done better
+       SWPB R9
+       MOVB R9,@>8C02
+       SWPB R9
+       MOVB R9,@>8C02
+       MOVB @BLANK,R9
+       LI   R7,80
+TABOF1 MOVB R9,@>8C00
+       DEC  R7
+       JNE  TABOF1
+       LWPI SCNWS             normal ws
+       JMP  TABONX
+
+*-------------------------------------------------------------------------
+*      MODIFY TABS
+*-------------------------------------------------------------------------
+MT
+       BL   @DISPLY      Display tab message ,current tabs
+       DATA MTRT
+       DATA MMT
+       CLR  R11          FLAG TO INDICATE NOT TO RETURN . . .
+       MOV  @SIX,@LMRG
+       MOV  @D85,@RMRG
+       LI   R9,CTXTM6    address of line
+* JPH ENTRY POINT FOR CREATING RULER
+* PUT POINTER TO TEXT IN R9 AND IT WILL RETURN WITH TEXT FILLED IN
+* POINTER SHOULD BE TO 6 BYTES BEFORE START OF ACTUAL BUFFER . . .
+* BECAUSE OF HOW ROUTINE HANDLES IT
+MT99
+       MOV  @FORMAT,R8   tab table pointer
+       C    *R8+,*R8+
+       LI    6,TABNO     No. of tabs
+MT10   MOVB *R8+,R12     Get next tab
+       SRL  R12,8        Right justify it
+       A    R9,R12       Add address of line
+       MOVB @TT,*R12     Output a T for tab
+       DEC  R6
+       JGT  MT10
+       MOV  @INDT,R12
+       A    R9,R12       Output I
+       MOVB @TI,*R12
+       MOV  @FORMAT,R8   Finished with tabs,
+       MOV  *R8+,R12     Get left margin pointer
+       A    R9,R12       Add address of line
+       MOVB @L,*R12      Output L
+       MOV  *R8+,R12     Get right margin
+       A    R9,R12
+       MOVB @R,*R12      Output R
+       MOV  @BELL,R12    get the BELL pointer
+       JEQ  MT12         not worth doing
+       A    R9,R12
+       MOVB @B,*R12      output B
+MT12
+       MOV  @PGMEDT,R12  in program mode?
+       JEQ  MT11         yup, don't bother with case change bs.
+       MOV  @CASCHG,R12  GET CASE CHANGE POINTER
+       JEQ  MT11         NOT WORTH DOING . . . .
+       A    R9,R12
+       MOVB @TC,*R12     output C
+MT11
+       MOV  R11,R11      IS THERE A PLACE TO RETURN TO?
+       JEQ  MT98         NOPE . . .GO ON WITH MT CODE
+       RT                RETURN FOR JPH
+MT98   B    @GETKEY      Go wait for change.
+MTRT   EQU  $
+       BL   @RESTAB
+       CLR  @LOADS            flag for indentation
+       MOV  @PGMEDT,R12       in program mode?
+       JEQ  MTRT01            nope . . .so don't kill case change
+       CLR  @CASCHG           make these characters
+       JMP  MTRT02
+MTRT01
+       CLR  @BELL              cancel-able
+MTRT02
+       MOV  R8,R14            R8-> left margin
+       MOV  @FORMAT,R8
+       LI   R9,CTXTM6         R9 address of scan line
+       LI   R15,CTEXT         R15 -> next character
+       LI   R6,TABNO          R6 = # of tabs in table
+MTR10  CI   R15,CTXTND        Finished scanning input?
+       JHE  MTR15             Yes
+       CB   *R15,@L           Left margin?
+       JEQ  MTR20             Yes
+       CB   *R15,@R           Right margin?
+       JEQ  MTR30             Yes
+       CB   *R15,@TI
+       JEQ  MTR40
+       CB   *R15,@TC          Case change?
+       JEQ  MTR60
+       CB   *R15,@B           bell character?
+       JEQ  MTR70
+       CB   *R15+,@TT         Tab?
+       JNE  MTR10             No, keep looking
+MTR13  MOV  R15,R13           Yes, calculate cursor addr
+       DEC  R13
+       S    R9,R13
+       SWPB R13               Put in left byte
+       MOVB R13,*R14+         Move cursor addr to table
+       DEC  R6                Count tab
+       JGT  MTR10             Table not full
+MTR15  EQU  $                 Table full so stop
+       C    *R8,@2(R8)        Left < Right margin?
+       JLT  MTR18             Yes, ok
+       CLR  @LOADS
+       JMP  MT
+MTR18  MOV  R6,R6             Filled up tab table?
+       JEQ  MTXIT             Yes
+       MOVB @D85+1,*R14+      no, fill it.
+       DEC  R6
+       JGT  MTR18
+MTXIT
+       ABS  @LOADS            Indent specified?
+       JNE  MTX10             Yes
+       MOV  *R8,@INDT         No,Indent = left margin
+MTX10
+       LI   R11,CMDXIT        fake return....
+SAVTAB LI   R8,TAB1           default to edit mode
+       ABS  @PGMEDT           in program mode?
+       JEQ  MTX11             nope.
+       LI   R8,TAB2           use program mode tabs
+MTX11
+       LI   R15,FORM0         where to put the stuff
+MTX12  MOV  *R15+,*R8+        11 words to move
+       CI   R15,11*2+FORM0    done?
+       JNE  MTX12             nope
+       RT
+*      B    @CMDXIT           Exit
+
+MTR20  MOV  R15,R13           Left margin
+       S    R9,R13            Cacl cursor
+       C    R13,@LMRG
+       JEQ  MTR22
+       MOV  R13,*R8           Output to table
+MTR22  INC  R15
+       JMP  MTR13
+MTR25  INC  R15
+       JMP  MTR10
+MTR60
+       MOV  R15,R13           determine the case change location
+       S    R9,R13
+       MOV  R13,@CASCHG
+       JMP  MTR25
+
+MTR70
+       MOV  R15,R13           set the bell position
+       S    R9,R13
+       MOV  R13,@BELL
+       JMP  MTR25
+
+MTR30  MOV  R15,R13           Right margin
+       S    R9,R13            Cacl cursor
+       C    R13,@RMRG
+       JEQ  MTR25
+       MOV  R13,@2(R8)        Output to table
+       JMP  MTR15             Stop scan here.
+MTR40  MOV  R15,R13
+       S    R9,R13
+       MOV  R13,@INDT
+       SETO @LOADS            user did specify indent
+       JMP  MTR22             make I a tab also.
+RESTAB MOV  @FORMAT,R8
+       MOV  *R8+,@LMRG
+       MOV  *R8+,@RMRG

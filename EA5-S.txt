@@ -1,0 +1,137 @@
+* ENTRY POINT TO LOAD THE FILE . . .BUT NOT START IT YET . . . . .
+LOADNO SETO @LSTART
+       JMP  LOADP2
+* ENTRY POINT WITH POINTER IN CALLING R0
+LOADPT
+       CLR  @LSTART
+LOADP2
+       MOV  *R13,R3      GET POINTER TO TEXT
+       LI   R1,P$BDAT+9
+       LI   R2,36
+LOADP1 MOVB *R3+,*R1+    MOVE THE FILENAME INTO THE BUFFER
+       DEC  R2
+       JNE  LOADP1
+       JMP  LOAD2        TRY AND LOAD THE FILE
+
+LOAD
+
+LODERR
+       RTWP              QUIT ON A NULL STRING
+
+LOAD2
+       CLR  R9           INITIALIZE START ADDRESS
+
+LOAD1
+       LI   R8,P$BDAT    P$BDAT
+
+       LI   R0,P$B
+       MOV  R8,R1
+       LI   R2,50
+       BLWP @VMBW
+
+       LI   R0,P$B+9
+       MOV  R0,@DSRPTR
+       BLWP @DSRLNK
+       DATA 8
+
+       LI   R0,P$B+1          ERROR CHECKING
+       BLWP @VSBR
+       SRL  R1,13
+       JNE  LODERR
+
+       LI   R0,P$BBUF
+       LI   R1,MORE
+       LI   R2,6
+       BLWP @VMBR
+
+       MOV  @COUNT,R2
+       LI   R0,P$BBUF+6
+       MOV  @WHERE,R1
+       MOVB @>8000,R11        SAVE THIS PAGE
+       CI   R1,>3FFF
+       JH   NXTGET
+       AI   R1,->2000         LOADING >2000 PAGE THINGS IN AT >0000
+       MOVB @UTILPG,@>8000
+*
+NXTGET MOVB @>8007,R12
+       MOVB @UTILPG+3,@>8007       PUT IN THE RIGHT PAGE IN CASE
+
+       BLWP @VMBRXX           use internal VMBR . . PAGE >E000 is not present
+       MOVB R11,@>8000        RESTORE PROPER PAGE
+       MOVB R12,@>8007        ""
+
+       MOV  R9,R0
+       JNE  NEXTZZ
+       MOV  @WHERE,R9
+*
+NEXTZZ MOV  @MORE,R10
+       JEQ  GO
+*
+       AI   R8,9         R8 IS NOW P$BDAT+9
+       MOVB *R8,R1
+       SRL  R1,8
+       A    R1,R8
+       LI   R1,>0100
+       AB   R1,*R8
+       JMP  LOAD1
+*
+GO     ABS  @LSTART           autostart?
+       JEQ  GO1               yip
+*      B    @GOTASM           got the assembler . . . .go on . . .
+GO1    LI   R2,26*32
+       BL   @CLS
+       LI   R0,>800           ea character location
+       BLWP @CHARS
+       BLWP @MODE32
+       LI   R0,>0401          ea character table location
+       BLWP @VWTR
+       MOV  R9,@9*2+>83E0     PUT IN R9 OF GPLWS
+       MOVB @UTILPG+3,@>8007       INSTALL THE PAGE
+       LWPI >83E0             LOAD UP THOSE REGS
+       MOV  @BR9,R6           GET THE COMMAND
+       MOVB @UTILPG,R0        PUT IN THE >2000 PAGE
+       MOV  @BR9+2,R4         MOVB R0,@>8001
+       MOV  @BR9+4,R5
+       B    R4                GO TO IT
+* NO LONGER USED ,. . .
+H2C    BYTE >2C               PAGE FOR >E000 FOR UTIL LOADER
+       EVEN
+
+P$B    EQU  >1200
+P$BBUF EQU  P$B+>40
+DSRPTR EQU  >8356
+
+MORE   BSS  6
+COUNT  EQU  MORE+2
+WHERE  EQU  MORE+4
+*
+BR9    B    *R9
+       MOVB R0,@>8001
+
+P$BDAT DATA >0500,P$BBUF,>0000,>2F01
+       BYTE >00
+       BSS  42
+       EVEN
+LSTART DATA 0
+***************
+VMBRXX DATA UTILWS,VMBR0
+
+UTILWS BSS  32
+AR     EQU  UTILWS+2+2+1
+
+VMBR0
+       BL   @AO
+AP     MOVB @>8800,*R1+
+       DEC  R2
+       JNE  AP
+       RTWP
+
+AO     CLR  R1
+AQ     MOV  *R13,R2
+       MOVB @AR,@>8C02
+       SOC  R1,R2
+       MOVB R2,@>8C02
+       MOV  @>0002(R13),R1
+       MOV  @>0004(R13),R2
+       B    *R11
+

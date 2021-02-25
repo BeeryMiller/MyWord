@@ -1,0 +1,580 @@
+       JEQ  NEWP10                                                      7-21
+       MOVB *CURADR,*R9+                                                7-21
+NEWP10 MOVB @CR,*CURADR+      Move data to next line, split.            7-21
+NEWP20 MOV  CURADR,R8                                                   10-15 JJ
+       MOV  @INDT,CURSOR                                                7-21
+       MOV  CURSOR,@LMRG                                                7-21
+       SETO @GOLF             go left flag, if needed.                  7-21
+       JMP  SPLIT                                                       7-21
+*-------------------------------------------------------------------------
+*      Insert blank line ( or split line )
+*-------------------------------------------------------------------------
+INSCHR ABS  @WDWRAP           word wrap mode?
+       JEQ  INSC40            no
+       SETO @CRFLAG
+       SETO @SWSF
+       CLR  @TOPPAR
+INSC05 CLR  @GOLF             Yes, split line
+       MOV  CURADR,R8
+       LI   R9,TEMPM6
+       A    CURSOR,R9         R9 -> DADDR in tempbf
+SPLIT  MOV  @LINEND,R6
+INSC10
+       C    R8,R6             End of line?
+       JH   INSC20            Yes, exit
+       MOVB *R8+,*R9+         mov rest of line to tempbf
+       JMP  INSC10
+INSC20
+       BL   @CTOEOL           Clear to end of line
+       BL   @UPDATE           Update split line
+       BL   @INSL50           Insert next split line
+       ABS  @GOLF
+       JEQ  INSC30            not enter key
+       JMP  SCRL01            enter key, scroll                         7-21
+INSC30 LI   R11,START
+       JMP  SCRL03            Scroll screen                             7-21
+INSC40
+       SETO @ICHRF            Not word wrap so set flag
+       RT
+INSERT BL   @UPDATE
+       BL   @INSLIN
+       JMP  INSC30
+       PAGE
+*-----------------------------------------------------------------------7-21
+*      MODE KEYS                                                        7-21
+*---------------------------------------------------------------------  7-21
+GOLEFT SETO @GOLF             Go left flag, BUMPC resets it             7-21
+       MOV  @SIX,@LMRG        Modify left margin temporarily            7-21
+       RT                                                               7-21
+WORDW  LI   R9,>30F0          Word wrap mode key                        7-21
+       CLR  @CTLMDE
+       ABS  @WDWRAP           Word wrap?                                7-21
+       JEQ  WORD10            No                                        7-21
+WORD03 LI   R8,OCSR           Yes, restore cursor                       7-21
+       CLR  @WDWRAP                                                     7-21
+       CLR  @CRFLAG                                                     11-05 JJ
+WORD07 BL   @VMBW             and toggle out of                         7-21
+WORD05 B    @START                                                      7-21
+WORD10 SETO @WDWRAP           Toggle into word wrap mode                7-21
+       LI   R8,WCSR           Change cursor                             7-21
+       JMP  WORD07                                                      7-21
+*                                                                       7-21
+LMODE  ABS  @LINF             Line number mode?                         7-21
+       JEQ  LMOD10            No                                        7-21
+       CLR  @LINF             Yes, get out of line number mode          7-21
+       JMP  LMOD20                                                      7-21
+LMOD10 SETO @LINF             Put in line number mode                   7-21
+LMOD20 B    @WINDOW           Adjust windows.                           7-21
+*                                                                       7-21
+INDENT EQU  $                                                           7-21
+       ABS  @WDWRAP           Nop if not word wrap mode                 7-21
+       JEQ  WORD05                                                      7-21
+       B    @NEWPAR                                                     7-21
+*                                                                       7-21
+PAGE   BL   @UPDATE           New page key.                             8-24
+       LI   R9,TEMPM6                                                   7-21
+       A    @LMRG,R9          Output pa cr                              8-24
+       MOVB @FORMF,*R9+       on a blank line.                          8-24
+       MOVB @EOT,*R9+                                                   7-21
+       BL   @INSLIN                                                     7-21
+       B    @SCRL01                                                     7-21
+*                                                                       7-21
+COLORC EQU  $                 Changes color of screen                   7-21
+       MOV  @COLORF,R6        Color flag                                7-21
+       INCT R6                                                          7-21
+       CI   R6,COLRL-2        Past end of table?                        7-21
+       JGT  COLR10            Yes                                       7-21
+COLR05 MOV  @COLOR(R6),R9     No, get color from table                  7-21
+       BL   @VAD              Write to reg 1                            7-21
+       MOVB @COLOR+1(R6),@UNICOL             save color in system flag
+       MOV  R6,@COLORF        Update color flag                         7-21
+       JMP  WORD05            Exit                                      7-21
+COLR10 CLR  R6                Go back to start of table                 7-21
+       JMP  COLR05                                                      7-21
+*                                                                       7-21
+CMODE  EQU  $                 Control Key entry mode.                   7-21
+       LI   R9,>30F0          Change cursor as indicator                7-21
+       ABS  @CTLMDE           Currently in Control mode?                7-21
+       JEQ  CMOD10            No, go there.                             7-21
+       CLR  @CTLMDE           Yes, get out and restore                  7-21
+       ABS  @WDWRAP           word wrap mode to the way it was.         7-21
+       JEQ  WORD03                                                      7-21
+       JMP  WORD10                                                      7-21
+CMOD10 LI   R8,CCSR           Output new cursor.                        7-21
+       SETO @CTLMDE
+       JMP  WORD07                                                      7-21
+GORMRG MOV  @RMRG,CURSOR      go to right margin for jackass
+       RT
+*
+*  go to last character after last character on the line....for jacky-poo
+*
+GOREND MOV  @LINADR,R9        get start of line
+       AI   R9,6               skip past the line numbers....
+       MOV  R9,R8             copy there of
+       AI   R9,79             point to end of line
+       MOV  R9,R6             r6=end of line
+GOREN1 CB   *R9,@BLANK        is this space?
+       JNE  GOREN4             no, so we be done
+       DEC  R9                count down a space
+       C    R9,R8             done?
+       JHE  GOREN1             nope.(was JNE)
+       RT                     don't move if line is entirely blank
+GOREN4 INC  R9                we want character after last character.....
+       C    R9,R6             past right margin?
+       JLE  GOREN5             nope.
+       MOV  R6,R9              yes, so use right margin instead.
+GOREN5 S    @LINADR,R9        get cursor offset from memory offset
+       MOV  R9,CURSOR
+       RT
+*                                                                       7-21
+*-------------------------------------
+* Change Search Direction subroutine
+*-------------------------------------
+
+CHDIR  LI   R11,START         fake return
+CHDIR0 INV  @DIRECT           toggle current value
+SHDIR  LWPI TEMPWS            safe
+*
+       LI   R8,CHARDN         assume forward
+       MOV  @DIRECT,R0        see if really forward
+       JEQ  CHDIR1            good guess
+       LI   R8,CHARUP         use backwards
+CHDIR1 CLR  R1
+       LI   R0,25*80+53+4     put text after % used message
+       BLWP @VSBWEA           show the character
+       LI   R9,>3000
+       BL   @VMBW             change character definition
+       LWPI SCNWS             back to normal
+       RT                     and continue on . ..
+
+*-------------------------------------------------------------------    7-21
+*      Insert line subroutine                                           7-21
+*-------------------------------------------------------------------    7-21
+INSLIN                                                                  7-21
+       MOV  CLINE,@LINENO                                               7-21
+INSL10 MOV  @TADR,@BUFADR     Inserts new line (Tempbf)                 7-21
+INSL20 BLWP @INSTLN                                                     7-21
+       SETO @FILCHG           file has been changed
+       CLR  @REFRSH           Insure cpu buffer gets updated            7-21
+       INC  @EOFM1            Bump end of file pointer                  7-21
+       RT                                                               7-21
+INSL30 MOV  CLINE,@LINENO                                               7-21
+INSL40 MOV  @LINADR,@BUFADR                                             7-21
+       A    @SIX,@BUFADR                                                7-21
+       JMP  INSL20                                                      7-21
+INSL50 MOV  CLINE,@LINENO     Insert line below current line            7-21
+       INC  @LINENO                                                     7-21
+       JMP  INSL10                                                      7-21
+       PAGE                                                             7-21
+*-------------------------------------------------------------------------
+*  PROCESS NORMAL KEY ENTRY
+*-------------------------------------------------------------------------
+NEWCHR ABS  @CTLMDE                                                     7-21
+       JEQ  NEWC01                                                      7-21
+       SB   @H40,@KEYCOD                                                7-21
+       SZCB @H80,@KEYCOD
+NEWC01 SETO @NCHAR            Flag for update of edit buffer            7-21
+       SETO @REFRSH           Flag to stop update of cpu buffer
+       MOVB @KEYCOD,CHAR      Get key code
+       MOV  @CMDRT,R6
+       JNE  NEWC02
+       ABS  @WDWRAP           Word wrap mode?
+       JNE  NEWC50            Yes
+NEWC02 ABS  @ICHRF            No, insert char mode?
+       JEQ  NEWC10            No
+       MOV  @LINADR,R9        Yes, move next characters
+       A    @RMRG,R9          to end of line.
+       MOV  CURADR,R6         end of move
+       MOV  R9,R8             R9 -> end of line
+       DEC  R8                R8 -> R9 - 1
+NEWC05 C    R8,R6             R6 -> cursor
+       JLT  NEWC10            done?
+       MOVB *R8,*R9           no
+       DEC  R8                back up next char
+       DEC  R9
+       JMP  NEWC05
+NEWC10
+       MOVB CHAR,*CURADR      Put new char in line buffer
+NEWC15 INC  CURSOR
+       JMP  BST05             Adjust cursor
+
+NEWC50 EQU  $                 Word wrap mode
+       CB   *CURADR,@EOT      Overstriking a cr?
+       JNE  NEWC52            No
+       MOV  CURSOR,R8
+       INC  R8
+       C    R8,@RMRG
+       JGT  NEWC52
+       JEQ  NEWC52
+       MOVB *CURADR,@1(CURADR)   Put cr out anyway.
+NEWC52 C    CURSOR,@RMRG      Room for one more character?
+       JLT  NEWC10            No, leave room
+NEWC24 BL   @AUTOIN           Wrap word and insert line
+       JMP  NEWC15            Put new char in buffer
+CHR0A  MOVB @EOT,@KEYCOD      Like wise he may enter 0A.
+       JMP  NEWC01                                                      7-21
+CHR0C
+       MOVB @FORMF,@KEYCOD                                              7-21
+       JMP  NEWC01                                                      7-21
+       PAGE
+*-------------------------------------------------------------------------------
+*      go to end of file with cursor, display last screen.... JPH
+*-------------------------------------------------------------------------------
+SHOEND BL   @UPDATE           update line if we must....
+       CLR  @REFRSH           update screen if we must
+       MOV  @EOF,SBIAS        get line pointer on bottom line
+       S    @SCNLEN,SBIAS     pull back a full screen....  (sbias=sbias-24)
+       INC  SBIAS             go ahead one more line so we see *eof* message
+       JGT  SHOEN1             we be ok...
+       CLR  SBIAS             top of file...
+SHOEN1 MOV  @EOF,CLINE
+       DEC  CLINE             put cursor on bottom line
+       CLR  CURSOR            and at start of line
+       JMP  BSTART            continue
+*-------------------------------------------------------------------------
+*      Add screen length to sbias.
+*-------------------------------------------------------------------------
+ROLLUP
+       BL   @UPDATE           Update line buffer if needed
+RLUP05 CLR  @REFRSH           refresh cpu buffer
+       MOV  CLINE,R8
+       A    @SCNLEN,R8        change current line by screen length
+       C    R8,@EOF           past EOF?
+       JHE  RLUP10            Yes
+       MOV  R8,CLINE          No, adjust Screen bias also
+       A    @SCNLEN,SBIAS     (SBIAS <= CLINE)
+       JMP  BSTART
+RLUP10
+       A    @SCNLEN,SBIAS     Cursor off screen
+       C    SBIAS,@EOF        Adjust Top of screen
+       JLT  RLUP20            SBIAS is off screen
+       MOV  @EOF,SBIAS        Point to EOF
+       DEC  SBIAS
+RLUP20 MOV  SBIAS,CLINE       Exit
+BSTART CLR  @CRFLAG           don't put cr's in.
+       CLR  @TOPPAR           not top of paragraph
+       CLR  @SWSF             Get out of insert mode
+BST05  MOV  @CMDRT,R11
+       JEQ  BST10
+       MOV  SBIAS,CLINE
+       INC  CLINE
+BST10  B    @START
+*-------------------------------------------------------------------------
+*      Subtract screen length from sbias.
+*-------------------------------------------------------------------------
+ROLDWN
+       BL   @UPDATE           Update current line if needed
+RDWN05 CLR  @REFRSH           Refrsh Cpu buffer
+       MOV  CLINE,R8
+       S    @SCNLEN,R8        Back up one screen
+       JLT  RDWN10            Off screen?
+       MOV  R8,CLINE          No
+       S    @SCNLEN,SBIAS
+       JLT  RDWN20            Off screen!
+       JMP  BSTART            No
+RDWN10
+       CLR  CLINE             Top of screen
+RDWN20
+       CLR  SBIAS             Top of screen
+       JMP  BSTART
+       PAGE
+*-------------------------------------------------------------------------
+*      Delete line key
+*-------------------------------------------------------------------------
+DELLIN
+       BL   @SAVDEL
+       CLR  @REFRSH           Update cpu screen
+       MOV  CLINE,@LINENO
+       BLWP @DELTLN           Delete current line
+       SETO @FILCHG           file has been changed
+       CLR  @DELAST           RESET DEL LAST LINE FLAG                  10-12 JJ
+       C    CLINE,@EOF
+       JLT  DELL10
+       SETO @DELAST           SET DELETE LAST LINE FLAG                 10-12 JJ
+       MOV  CLINE,CLINE
+       JNE  UPAR05            Scroll screen up
+DELL10 JMP  BST10                                                       7-21
+*-------------------------------------------------------------------------
+*      Down arrow key
+*-------------------------------------------------------------------------
+DWNAR
+       BL   @UPDT10           Update line and bump CLINE                7-21
+       B    @SCRL01
+*-------------------------------------------------------------------------
+*      Up arrow key
+*-------------------------------------------------------------------------
+UPAR
+       BL   @UPDT10           Update CLINE                              7-21
+UPAR05 DEC  CLINE             Go to previous line
+       C    CLINE,SBIAS
+       JLT  UPAR20            Off screen
+UPAR10
+       B    @START
+UPAR20
+       CLR  @REFRSH
+       MOV  SBIAS,SBIAS       First line?
+       JNE  UPAR30            no
+UPAR25 CLR  CLINE             Yes, don't scroll
+UPAR30
+       MOV  CLINE,SBIAS       scroll up
+       JLT  UPAR25            Cline < 0 error
+       JMP  UPAR10
+       PAGE
+*-------------------------------------------------------------------------------
+*      Oops Key
+*-------------------------------------------------------------------------
+OOPS   CLR  @REFRSH
+       CB   @LSTKEY,@H8E      this checks for ^N as last key, in use for now
+       JEQ  OOPS10
+       CB   @LSTKEY,@H07
+       JEQ  OOPS10
+       RT
+OOPS10
+       ABS  @DELAST           DELETED LAST LINE?                        10-12 JJ
+       JEQ  OOPS20            NO                                        10-12 JJ
+       INC  CLINE             YES, INSERT AFTER LAST LINE               10-12 JJ
+OOPS20 MOV  CLINE,@LINENO                                               10-12 JJ
+       MOV  @SDELA,@BUFADR
+       BL   @INSL20
+       JMP  UPAR10
+*-------------------------------------------------------------------------
+*      Duplicate line key
+*-------------------------------------------------------------------------------
+DUPLIC MOV  CLINE,@LINENO     Duplicate previous line
+       JEQ  UPDA20            Line = 0?
+       DEC  @LINENO           No, Back up to previous line
+       MOV  @LINADR,@BUFADR   Read line from edit buffer
+       CLR  @REFRSH           make sure screen is updated  JPH
+       BLWP @GETLN
+*      RT                     TI
+       JMP  UPDATE            make sure buffer is updated  JPH
+
+UPDT10 CLR  @TOPPAR                                                     7-21
+       CLR  @CRFLAG                                                     7-21
+UPDATE ABS  @NCHAR            should this line be updated?
+       JEQ  UPDA20            no
+UPDA05 C    CLINE,@EOFM1
+       JGT  UPDA20            Line past end of file!
+       MOV  CLINE,@LINENO     yes
+UPDA10 MOV  @LINADR,@BUFADR
+       A    @SIX,@BUFADR
+UPDA12 BLWP @UPDTLN           update line in edit buffer
+UPDA20 RT
+*---------------------------------------------------------------------------
+*      Clear to end of line key
+*---------------------------------------------------------------------------
+
+* CLRLIN BY JPH TO CLEAR ENTIRE LINE
+*  AND PUT CURSOR AT BEGINNING OF LINE
+CLRLIN
+       MOV  CURADR,R9
+       S    CURSOR,R9         point to start of the line
+       CLR  CURSOR            put cursor at start of line
+       JMP  CTOE05
+CTOEOL
+       MOV  CURADR,R9
+CTOE05 MOV  @LINEND,R6
+CTOE10 C    R9,R6
+       JH   UPDA20
+       MOVB @BLANK,*R9+
+       JMP  CTOE10
+
+CLRTMP LI   R14,TEMPBF         Clear temporary buffer
+TADR   EQU  $-2
+       LI   R6,80
+CLRT10 MOVB @BLANK,*R14+       blank buffer for insert
+       DEC  R6                 line routines
+       JGT  CLRT10
+       RT
+BKREPB LI   R14,REPBUF        Blank replace buffer
+BKRE10 LI   R6,160            May blank too much, but ok since it
+       JMP  CLRT10            is the last buffer.
+       PAGE
+*-------------------------------------------------------------------------
+*      Tab Key
+*-------------------------------------------------------------------------
+BACKTB CLR  R15
+       JMP  TAB00
+TAB    SETO R15
+TAB00  MOV  @FORMAT,R8        Get pointer to tab table
+       MOV  CURSOR,R9
+       SWPB R9                cursor column in left byte
+       C    *R8+,*R8+         Bump R8 by 4 to point to TABS
+       MOV  R8,R10            Save pointer to TABS
+       LI   R6,TABNO
+TAB10
+       CB   R9,*R8            Cursor column < TAB?
+       JLT  TAB40             Yes
+       JNE  TAB12
+       ABS  R15               CB   @KEYCOD,@BKTAB
+       JEQ  TAB45
+TAB12  INC  R8                No, get next tab
+       DEC  R6                Out of RANGE?
+       JGT  TAB10             no
+       ABS  R15               CB   @KEYCOD,@BKTAB    Yes,
+       JEQ  TAB20             Yes
+TAB15  MOV  @LMRG,CURSOR      No, go to right margin
+       RT
+*TAB15  MOV  @LMRG,CURSOR
+*      MOV  @CMDRT,R0         command mode?
+*      JNE  TAB23              yes . . .
+*      B    @DWNAR
+TAB20  MOV  @RMRG,CURSOR      Back tab to left margin
+       RT
+*TAB20  MOV  @RMRG,CURSOR      jph lives . . .
+*      MOV  @CMDRT,R0         command mode?
+*      JNE  TAB23              yup
+*      B    @UPAR
+TAB22  MOV  @LMRG,CURSOR
+TAB23  RT
+TAB40
+       ABS  R15               CB   @KEYCOD,@BKTAB    Back tab?
+       JNE  TAB65             No                                        10-25 JJ
+TAB45  C    CURSOR,@LMRG
+       JEQ  TAB20             at left margin, so move up a line and to right
+       JLT  TAB20                                                       7-21
+TAB50  DEC  R8                Yes, back up
+       C    R8,R10            Out of range?
+       JL   TAB22             Yes go to left margin                     7-21
+       CB   *R8,R9            No, current tab = cursor
+       JEQ  TAB50             Yes, back up more
+TAB60  MOVB *R8,CURSOR        No, adjust cursor
+       SRL  CURSOR,R8
+       RT
+TAB65  C    CURSOR,@RMRG                                                10-25 JJ
+       JHE  TAB15                                                       10-25 JJ
+       JMP  TAB60                                                       10-25 JJ
+*----------------------------------------------------------------       10-25 JJ
+*      Tab to next word
+*----------------------------------------------------------------       10-25 JJ
+TABWD  MOV  CURADR,R8         Current cursor
+       MOV  @LINEND,R9        End of line
+TABN10 C    R8,R9             Out of range?
+       JHE  TAB15             Yes, go to left margin
+       CB   *R8+,@BLANK       Blank?
+       JNE  TABN10            No, loop till blank.
+       MOV  R8,R10
+TABN20 C    R8,R9             Yes, find next non blank.
+       JL   TABN22
+       MOV  R10,CURADR        wimp out at end of line
+       JMP  TABN24
+TABN22 CB   *R8+,@BLANK
+       JEQ  TABN20
+       MOV  R8,CURADR
+       DEC  CURADR            Found it, adjust cursor.
+TABN24 MOV  CURADR,CURSOR
+       S    @LINADR,CURSOR
+       RT
+       PAGE
+*-------------------------------------------------------------------------
+*      Toggle to next screen key
+*-------------------------------------------------------------------------
+NXTSCN EQU  $                 Next window
+       MOV  R11,R14
+*      BL   @UPDATE
+*      CLR  @REFRSH
+       MOV  *WPTR,R8          Current window
+       S    R8,CURSOR         relative cursor position
+       C    *WPTR+,*WPTR+     Bump wptr by 4
+       MOV  *WPTR,*WPTR       End of window table?
+       JLT  NXTS10            Yes
+NXTS05 A    *WPTR,CURSOR
+       B    *R14
+NXTS10 LI   WPTR,WTOP
+       JMP  NXTS05
+*-------------------------------------------------------------------------
+*      Delete character key
+*-------------------------------------------------------------------------
+DELCHR
+       CLR  @ICHRF            Toggle out of insert mode
+       SETO @NCHAR            insure line gets updated
+       MOV  @LINEND,R6        Calculate end of line address
+       MOV  CURADR,R9
+       MOV  CURADR,R8
+       INC  R8                Delete one character
+DELC10 C    R8,R6
+       JH   DELC20
+       MOVB *R8+,*R9+
+       JMP  DELC10
+DELC20
+       MOVB @BLANK,*R9        No, blank last character
+       RT
+
+GOTO1  CLR  CURSOR
+       RT
+*-------------------------------------------------------------------------
+*      Find next paragraph, Find last paragraph
+*-------------------------------------------------------------------------
+LASTP  LI   R14,>601          DEC CLINE for FS05
+       CLR  @ENDLIN           End of search line.
+       BL   @UPDATE           Update current line.
+LAST10 MOV  CLINE,CLINE       Start on previous line.
+       JEQ  NEXT99            Out of range.
+       DEC  CLINE
+       BL   @FINDCR           Find carriage return.
+       BL   @FINDNB           Find first non blank   LABEL-             11-11 JJ
+       JMP  LAST10            This was a blank line.
+       MOV  CLINE,CLINE       Found it, so back up some more.
+       JEQ  LAST35                                                      11-11 JJ
+       DEC  CLINE                                                       11-11 JJ
+LAST25 BL   @FINDCR           Find (previous) carriage return.
+LAST30 C    CLINE,@EOFM1      Advance to next line.
+       JGT  NEXT99            Out of range.
+       INC  CLINE
+       BL   @FINDNB           Find first non blank
+       JMP  LAST30            line is blank, go to next line.
+LAST35 DEC  CURADR            Paragraph found, so adjust pointers.      11-11 JJ
+       MOV  CURADR,CURSOR
+       S    @LINADR,CURSOR
+       SETO @TOPPAR           Top of paragraph flag.
+LAST40 MOV  CLINE,SBIAS       Top of screen.
+       B    @START
+*----------------------------------------------------------------       11-11 JJ
+NEXTP  EQU  $
+       LI   R14,>581          INC CLINE
+       MOV  @EOFM1,@ENDLIN    End of search line.
+       BL   @UPDATE           Update current line
+       JMP  LAST25            go FINDCR, then FINDNB until done.
+
+NEXT99 MOV  @ENDLIN,CLINE     Did not find next paragraph
+       BL   @FINDNB           Find first non blank.
+NEXT98 CLR  CURSOR            Returns here if not found
+       MOV  @ENDLIN,CLINE
+       BL   @BLOOP            So error, and go to end of file.
+       SETO @TOPPAR
+       JMP  LAST40
+*----------------------------------------------------------------       11-11 JJ
+FINDCR EQU  $                 Find next CR, or last CR.
+       MOV  R11,@LEVEL3
+       MOV  CLINE,SBIAS
+       CLR  @SWSF
+       CLR  @REFRSH
+       MOV  @LINADR,@COLSTA   Set up pointers for FSSUB
+       MOV  @LINEND,@COLEND
+       MOV  @ONE,@STRL
+       MOV  @FEOT,@STRING     Look for CR next
+       MOV  @SIX,CURSOR
+       BL   @SAVEWS
+       BL   @FS05
+       JMP  NEXT99            Cr not found.
+       MOV  @LEVEL3,R11
+       RT
+*----------------------------------------------------------------       11-11 JJ
+FINDNB EQU  $
+       MOV  R11,R6
+       MOV  @LINADR,CURADR    Get next line.
+       A    @LMRG,CURADR
+       BL   @GETLC
+       JMP  NEXT98
+FNDN10 CB   *CURADR+,@BLANK   Scan for first character
+       JGT  FNDN20            Found it.
+       C    CURADR,@LINEND    End of line?
+       JLT  FNDN10            No
+       B    *R6
+FNDN20 INCT R6
+       B    *R6
+*----------------------------------------------------------------       11-11 JJ
+       PAGE
+*-------------------------------------------------------------------------
+*      REFORMAT ROUTINE FOR WORD WRAP MODE
+*-------------------------------------------------------------------------

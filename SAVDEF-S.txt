@@ -1,0 +1,81 @@
+DEFDAT DATA 0,>1000,>6000
+CONTXT TEXT 'CONTROL'                        7 bytes
+DEFPAB DATA >0600,>1040,>0000,>1000,18
+*      BSS  40
+DEFTXT TEXT '    Save Options   '            19 bytes
+       TEXT 'Insert MY-Word Disk'            19 bytes
+       TEXT ' in Volume         '
+       TEXT '   SPACE to Save   '            ""
+SP     TEXT '    F9 to Abort    '            ""
+BACK   BYTE 15
+       EVEN
+SAVDEF
+       BLWP @MODE80           24 line mode
+       DATA 0
+*
+       LI   R0,TIW
+       MOV  R0,@SLOAD+2       patch so entry on restart will be correct...
+*
+       LI   R2,80*24
+       BL   @CLS              clear screen
+       BLWP @VMBWD            text line 1
+       DATA 7*80+30,DEFTXT,19
+       BLWP @VMBWD            text line 2
+       DATA 9*80+30,19*1+DEFTXT,19
+       BLWP @VMBWD            text line 3
+       DATA 11*80+30,19*2+DEFTXT,19
+       BLWP @VMBWD            text line 4
+       DATA 13*80+30,19*3+DEFTXT,19
+       BLWP @VMBWD            text line 5
+       DATA 15*80+30,19*4+DEFTXT,19
+       LI   R0,11*80+30+11
+       LI   R1,VOLUME
+       MOV  @VOLLEN,R2
+       BLWP @VMBW             put up the volume name . . .
+*
+SAVDE1 BLWP @KSCAN
+       MOVB @>8375,R1
+       ANDI R1,>7F00
+       CB   R1,@SP
+       JEQ  SAVDE2
+       CB   R1,@BACK
+       JEQ  SAVDE3
+       JMP  SAVDE1
+*
+SAVDE2 MOV  @VOLLEN,R3
+       MOV  R3,R4
+       AI   R4,7              r4=name length
+       MOV  R4,@DEFPAB+8      save name length
+*
+*      LI   R0,DEFPAB+10
+       LI   R0,TXTBUF
+       LI   R1,VOLUME
+SAVDE8 MOVB *R1+,*R0+         move volume name
+       DEC  R3
+       JNE  SAVDE8
+       LI   R1,CONTXT
+       LI   R3,7
+SAVDE9 MOVB *R1+,*R0+         move file name
+       DEC  R3
+       JNE  SAVDE9
+*
+       BLWP @VMBWD            put the 6 byte header in
+       DATA >1040,DEFDAT,6
+       BLWP @VMBWD            put the program in
+       DATA >1046,>6000,>1000
+       BLWP @VMBWD            move the PAB
+       DATA >1000,DEFPAB,10
+       BLWP @VMBWD                           move filename...
+       DATA >1000+10,TXTBUF,40
+       LI   R0,>1009
+       MOV  R0,@>8356         dsrlnk pointer
+       BLWP @DSRLNK           save the file (or at least try to)
+       DATA 8
+
+SAVDE3 BLWP @MODE80           back to 26 line mode
+       DATA 26
+       LI   R0,REEDIT
+       MOV  R0,@SLOAD+2       repatch for externals
+
+       B    @MENU             and return
+

@@ -1,0 +1,62 @@
+VSBWEA DATA UTILWS,VSBW0
+VMBWEA DATA UTILWS,VMBW0
+VSBREA DATA UTILWS,VSBR0
+VMBREA DATA UTILWS,VMBR0
+VWTREA DATA UTILWS,VWTR0
+KSCANE DATA UTILWS,KSCAN0
+
+UTILWS BSS  32
+AK     BSS  2
+AR     EQU  2*2+1+UTILWS LOW BYTE OF R2 OF UTILWS
+
+KSCAN0
+       LIMI 2
+       LIMI 0
+       LWPI >83E0
+       BL   @>000E
+       LWPI UTILWS
+       RTWP
+VSBW0
+       BL   @AM
+       MOVB @>0002(R13),@>8C00
+       RTWP
+
+VMBW0
+       BL   @AM
+AN     MOVB *R1+,@>8C00
+       DEC  R2
+       JNE  AN
+       RTWP
+
+VSBR0
+       BL   @AO
+       MOVB @>8800,@>0002(R13)
+       RTWP
+
+VMBR0
+       BL   @AO
+AP     MOVB @>8800,*R1+
+       DEC  R2
+       JNE  AP
+       RTWP
+
+VWTR0
+       MOV  *R13,R1
+       MOVB @>0001(R13),@>8C02
+       ORI  R1,>8000
+       SWPB R4
+       MOVB R1,@>8C02
+       RTWP
+
+AM     LI   R1,>4000
+       JMP  AQ
+AO     CLR  R1
+AQ     MOV  *R13,R2
+       MOVB @AR,@>8C02
+       SOC  R1,R2
+       SWPB R4
+       MOVB R2,@>8C02
+       MOV  @>0002(R13),R1
+       MOV  @>0004(R13),R2
+       B    *R11
+

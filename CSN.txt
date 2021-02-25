@@ -1,0 +1,35 @@
+CSN    DATA CSNWS,HEXASC
+CSNWS  BSS  32
+D10    DATA 10
+* CALLING R0 IS POINTER TO 5 BYTE TEXT BUFFER
+
+********************************************************************************
+*      CONVERT HEX TO ASCII
+*      ALWAYS DOES 5 SPACES, RIGHT JUSTIFIED
+*      NUMBER IN R7     USES R6-R10, DESTROYS R7
+********************************************************************************
+HEXASC CLR  R10          FLAG FOR LEADING 0 SUPPRESSION
+       MOV  @FAC,R7      GET NUMBER
+       MOV  *R13,R12     GET BUFFER POINTER
+       LI   R9,10000     FIRST DIVISOR
+HLOOP  CLR  R8           FOR DIV/MUL
+       CLR  R6           FOR DIV/MUL
+       DIV  R9,R6
+       MOV  R6,R6        ZERO?
+       JNE  NZERO        BRANCH IF YES
+       MOV  R10,R10      ARE THERE ANY PREVIOUS DIGITS
+       JNE  NZERO        BRANCH IF YES
+       LI   R6,>2000     IS THIS THE LAST DIGIT
+H80    EQU  $-2
+       CI   R9,1
+       JNE  SUPPR        BRANCH IF NOT
+NZERO  AI   R6,>30       TO ASCII
+       INC  R10          NO MORE LEADING ZERO SUPPRESS
+       SWPB R6
+SUPPR  MOVB R6,*R12+     TO VDP RAM
+       DIV  @D10,R8      NEXT LOWER DIGIT
+       MOV  R8,R9
+       JNE  HLOOP        BRANCH IF NOT YET DONE
+
+       RTWP              RDTURN
+

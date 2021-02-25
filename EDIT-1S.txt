@@ -1,0 +1,665 @@
+       IDT  'EDIT'
+       REF  GETLN,INSTLN,DELTLN,UPDTLN
+       REF  SDEVNM,SFILNM,SPRMPT,SDELIN
+       REF  LINBUF,ERR9
+       REF  SEOF,CLOSE                                                  8-24
+       REF  LINBF0
+       REF  LOADWS
+       REF  TBLND,TBL
+       REF  EDBFND,EDITBF
+       REF  LOAD01,SAVE01,OVRLEN
+       REF  DF01,SD01,PF01,VF01
+       REF  QF01,PG01,MPG
+       REF  MIND01
+       REF  UT01
+       REF  EOF,STBLND,SEBFND
+       REF  MODE,MMT,MMT1,MSL
+       REF  MCL,MML,MDL
+       REF  MFS,MRS,MQE
+       REF  MSD,MSV,MWC
+       REF  MLF,MPF,MDF,MTAB,MVER
+       REF  MODS,MODL,MODF,MRE,MJPH                                     7-21
+       REF  MOTHER,MHELP                     father?
+       REF  FFLAG,LFLAG            SEE DEF PARSXX BELOW                 11-22 JJ
+
+       REF  SHOWTM                 ROUTINE TO PUT TIME ON SCREEN
+       REF  EDTINI            FLAG FOR FIRST ENTRY OR NOT.
+       REF  LSTFIL            last file used buffer. 40 bytes
+       REF  TABSTA,BELL,CASCHG      tab status stored in CONTROL
+       REF  INTER             interlace flag
+       REF  WILDCD            wild card character stored in CONTROL
+       REF  LINF              line numbers on/off flag stored in CONTROL
+       REF  BINDEC            word to text convert in LOADSAVE
+*
+       DEF  CNVLC,CNVLC8,FORM0                                          8-24
+       DEF  COLNUM,NUM1,NUM2,NUM3,NUMCHK
+       DEF  VDPTBL,EXIT,EXIT2
+       DEF  ERRM10,SKIPBK,SKIP10                                        10-15 JJ
+       DEF  RESFIL,SAVFIL,RESDEV,SAVDEV
+       DEF  IOERR,IONUM,ERRLIN
+       DEF  CTEXT,CMDRT,REFRSH
+       DEF  MOVE,S,A,C,F,L,Y,N
+       DEF  GETLIN,VADW,VAD
+       DEF  LFTAR,RGTAR,UPAR,DWNAR
+       DEF  OVRLAY,CTXTND
+       DEF  CPUSCN,PARSEB
+       DEF  FLACSR,LINADR,LINEND
+       DEF  REST10,DELCHR,INSCHR
+       DEF  PARSE,NUMBER,NUM
+       DEF  INSLIN,CMDXIT,COMAND
+       DEF  EDIT,BUFADR,LINENO
+       DEF  DSRERR,SCNWS,SLASH
+       DEF  BLANK,VMBW$,MOVE05
+       DEF  VMBW10,VDPWD$,STRL1
+       DEF  STRING,CNT,COLSTA,COLEND
+       DEF  DISPLY
+       DEF  ERRMSG,LEVEL1,PARSEA
+       DEF  CRFLAG,CPUSND
+       DEF  SREGS,SREGS2,TEMPBF,TEMPM6
+       DEF  SAVER0            PASS R0 FROM PARSE TO LOADFILE            10-15 JJ
+       DEF  MASK              DISABEL FCTN = AFTER SHOW DIR             10-15 JJ
+       DEF  START,CTXTM6
+       DEF  EDITOR
+       DEF  PARSXX            USED TO MOVE CODE FROM LOADSAVE           11-22 JJ
+*                             TO REDUCE SIZE OF LOADSAVE  JJ            11-22 JJ
+       REF  PGMEDT            PROGRAM EDIT MODE FLAG.
+*      DEF  CASCHG            FOR PROGRAM EDITOR
+       REF  FILCHG            file changed flag
+*      DEF  LINF              needed for view file to see if line numbers are on
+       DEF  CTXEND            end of line data in parse
+*
+VDPWD  EQU  >8C00
+VDPWA  EQU  >8C02
+VDPRD  EQU  >8800
+GROMRA EQU  >9802
+GROMWA EQU  >9C02
+KEYBRD EQU  >8374
+KEYCOD EQU  >8375
+STATUS EQU  >837C
+GPLWS  EQU  >83E0
+SCAN   EQU  >000E
+C24    EQU  24
+*----------------------------------------------------------------------
+CLINE  EQU  1
+CURSOR EQU  2
+SBIAS  EQU  3
+CURADR EQU  4
+CHAR   EQU  5
+WPTR   EQU  7
+SADDR  EQU  8
+DADDR  EQU  9
+COUNT  EQU  6
+SAVVDP EQU  >83D4
+       DORG >F020        >8308 . . .IS WAS . . . NOW IT IS FAST!
+SCNWS  DATA 0            R0
+       DATA 0            R1   CLINE
+       DATA 0            R2   CURSOR
+       DATA 0            R3   SBIAS
+       DATA 0            R4   SDISP
+       DATA 0            R5   CHAR
+       DATA 0            R6   COUNT
+       DATA 0            R7   WPTR
+       DATA 0            R8   SADDR
+       DATA 0            R9   DADDR
+       DATA 0            R10
+       DATA 0            R11
+       DATA 0            R12  CURADR
+       DATA 0            R13
+       DATA 0            R14
+       DATA 0            R15
+       RORG >0000
+EDITOR BLWP @EDIT        must be first thing in program.
+       PAGE
+SCLR
+CMDCLR EQU  $                 Cleared command data
+OVRL   DATA 0
+CMDRT  DATA 0                 Command flag + return address
+MARKER DATA 0                 Cursor move marker for replace
+UPCASE DATA 0                 Flag convert to upper case
+DESSAV DATA 0
+MFLAG  DATA 0                 Marker flag, to update cursor.
+GOLF   DATA 0                 go left flag.
+SWSF   DATA 0                 Store ws flag for insert char
+REFRSH DATA 0                 Refresh cpu buffer flag
+VRFY   DATA 0                 Verfify and replace flag
+WRAPL  DATA 0                 Wrap length of word.
+PROMPT DATA 0                 Addr exit after key flag
+LINTBL BSS  24*2              Line table for vdp access
+ERRLIN EQU  LINTBL+4
+LINTND EQU  $
+CMDCL  EQU  $-CMDCLR          Length of command clear area.
+LINADR DATA 0                 Line address in cpu buffer
+LINEND DATA 0                 Address of end of line
+ICHRF  DATA 0                 Insert character mode flag
+FIRST  DATA 0                 First time thru flag
+CTLMDE DATA 0                 Control Character Mode.                   7-21
+WDWRAP DATA 0                 Word wrap flag
+LINENO EQU  >EFF2             Line # for Bufmgr routines
+*LINENO DATA 0                 Line # for Bufmgr routines
+EOFONS DATA 0                 End of file on screen
+EOFM1  DATA 0                 End of file - 1
+*BUFADR DATA 0                 Line address for Bufmgr routines
+BUFADR EQU  >EFF0             Line address for Bufmgr routines
+LOADS  DATA 0                 Used by parse only, for line #.
+RLINE  DATA 0                 Next line to read in reformat
+WLINE  DATA 0                 Next line to insert in reformat
+NCHAR  DATA 0                 Update edit buffer flag
+* linf flag moved to CONTROL for Wayne Stith on 4/14/88
+*LINF   DATA 0                 Line # mode flag
+TOPPAR DATA 0                 Top of paragraph flag
+RMRG   DATA 0                 Right margin
+LMRG   DATA 0                 Left margin
+WTOP   DATA 0,0,0,0,0,0,0     Window table
+SCNLEN DATA 0                 # Rows on the screen
+FORMAT DATA 0                 Pointer to format table
+CRFLAG DATA 0                 Put cr in buffer or not
+COLORF DATA 0                 Pointer to color table
+SREGS  BSS  7*2               Saved workspace
+SREGS2 EQU  SREGS+2
+CLRLEN EQU  $-SCLR            End of cleared data
+NUMCHK DATA 0
+TWO    DATA 2
+NUM1   DATA 0                 Data for PARSE.
+NUM2   DATA 0
+NUM3   DATA 0
+SAVER0 DATA 0                 R0 IS FLAG WHEN NUM1 = 0                  10-6 JJ
+ENDLIN DATA 0                 Used in lastp,nextp
+DELAST DATA 0                 DELETE LAST LINE FLAG                     10-12 JJ
+DIRECT DATA 0                 flag for search direction. 0=forward
+
+H61    BYTE >61
+H7A    BYTE >7A
+H8E    BYTE >8E               DELETE LINE (OOPS)
+H0F    BYTE >0F               ESCAPE KEY
+H07    BYTE >07               DELETE LINE
+H40    BYTE >40               Used for control char mode.               7-21
+H39    BYTE >39
+CSR    BYTE >1E               Cursor character code
+WLIN   BYTE 0,0,6  JPH        window col for line # mode
+WNLIN  BYTE 6,6,6  JPH        window column defaults
+E0     BYTE >E0
+EOT    EQU  $                 End of text marker
+CR     BYTE >0D,'/'           Ascii carriage return
+BKTAB  BYTE >94               Back tab key code
+FIVE   BYTE 5
+LSTKEY BYTE 5                 Last Key enterred.                        7-21
+FEOT   DATA EOT               Trick to find cr (control=)
+       EVEN
+GPC    BYTE 0                 Must be even address
+GPC1   BYTE 0                 Gpl return address
+GPLRT  DATA 0
+SWIDTH DATA 79  JPH           Default screen width
+SSNLEN DATA 24                Default screen length
+TOPSCN DATA CPUSCN            Default top of screen
+VDPR1  BYTE >81
+SVDP   BYTE >F0
+PERIOD BYTE '.'
+QUOTE  BYTE >27               "'"
+DELIM  BYTE 0                 Delimiter for parse
+DBLNK  BYTE >00
+FORMF  BYTE >0C
+VDPTBL BYTE >70,0,>0E,1,6,0,>F5
+OCSR   BYTE 8,>3C,>24,>24,>24,>24,>24,>24,>3C
+WCSR   BYTE 8,>70,>70,>70,>70,>70,>70,>70,>70
+CCSR   BYTE 8,>00,>00,>00,>00,>00,>00,>00,>7C                           7-21
+CHARUP BYTE 8,>30,>78,>FC,>30,>30,>30,>30,>30
+CHARDN BYTE 8,>30,>30,>30,>30,>30,>FC,>78,>30
+MASK   BYTE >10                                                         8-24
+       EVEN
+COLOR  EQU  $
+BLUE   DATA >87F4             color options                             7-21
+GREEN  DATA >87F3
+CYAN   DATA >8717
+BLACK  DATA >87F1
+       DATA >87F6             PC
+       DATA >871A             PC
+COLRL  EQU  $-COLOR
+SOUND  BYTE >80,>20,>90,>9F   Sound for bloop
+H80    EQU  SOUND
+*LBIAS  DATA >1386             Load bias in vdp for moves.
+*
+** Data for cursor
+*
+B06    BYTE >06
+BFF    BYTE >FF
+D0003  DATA >0003
+D0009  DATA >000A
+D000A  DATA >000A
+FLASH  DATA 0
+DELAY  DATA 0
+TIMER  EQU  >8379
+       PAGE
+FORM0  EQU  $            Default format table
+       DATA 6,85
+TABTP
+       BYTE 11,16,21,31,41,51,61,71,85,85,85,85
+       BYTE 85,85,85,85
+TABNO  EQU  $-TABTP      Number of entries in tab table
+INDT   DATA 6                 indentation                               8/30/82
+*            012345678901234567890123456789 THIS IS THIRTY COLUMN       8/30/82
+ASTER  EQU  $+6               an asterisk for compare in casechange routine
+EOFMSG TEXT '      *End of file*           '                            9-22 JJ
+       TEXT '     '
+       TEXT '                                        '
+MVRFY  TEXT '     '
+       TEXT 'REPLACE STRING (Yes,No,All,Sto'                            7-21
+       TEXT 'p)?  '                                                     7-21
+       TEXT '                                        '
+IOERR  EQU  $
+       TEXT '      IO ERROR CODE = '
+IONUM  TEXT '              '                                            7-21
+       TEXT '                                        '
+MEMERR TEXT '     '
+       TEXT 'TEXT BUFFER FULL, save or purg'
+       TEXT 'e!   '                                                     7-21
+       TEXT '                                        '
+MEMTXT TEXT '% Free'          6 bytes . .  memory free text
+       EVEN
+LEVEL1 DATA 0            Return address blocks
+LEVEL3 DATA 0
+RSTRL  DATA 0            Replace string length
+STRL   BYTE 0            String length
+STRL1  BYTE 0
+COLSTA DATA 0            Column start addr for find string
+COLEND DATA 0            Column end addr for find string
+ELINE  DATA 0            Line count for line commands
+STRING DATA 0            Pointer to string to find
+RSTRNG DATA 0            Pointer to string to replace with
+RSFLAG DATA 0            FLAG TO CHECK FOR 3 DELIMITERS                 9-28 JJ
+CNT    DATA 0            Count for string commands
+COLNUM DATA 0
+*TABSTA DATA 0            SHOW TAB ON/OFF . .. ON=0 . . OFF>0
+*  TABSTA,BELL,CASCHG  MOVED TO CONTROL SO IT COULD BE SAVED
+EFIRST DATA 0            INDICATES OF THIS IS FIRST TIME PROGRAM HS BEEN RUN
+*CASCHG DATA 35           CHANGE CASE POSITION FOR PROGRAM EDITOR
+*BELL   DATA 0            bell character location
+BELLSV BSS  2            old cursor location save
+TERMIN EQU  $            Table of terminators for parse
+SLASH  BYTE '/'
+BLANK  BYTE ' '
+H20    EQU  BLANK
+COMMA  BYTE ','
+LPAREN BYTE '('
+RPAREN BYTE ')'
+TERMND EQU  $
+       EVEN
+ONE    EQU  $
+HUNDRE EQU  $+4
+TEN    DATA 1,10,100,1000
+V      BYTE 'V'
+Y      BYTE 'Y'
+N      BYTE 'N'
+A      BYTE 'A'
+B      BYTE 'B'
+TI     BYTE 'I'
+       BYTE 0            make it even
+RULERX BSS  5            SAFE FOR RULER STORAGE  - MAKE IT EVEN
+RULER  BSS  86           BUFFER FOR RULER STORAGE
+       EVEN
+FREBUF BSS  6                 buffer to hold ascii of % of free space
+TEMPWS BSS  32           WORK SPACE FOR ASSORTED PATCH WORK
+*PGMEDT DATA 0 IN CONTROL;PROGRAM EDIT FLAG. 0= NORMAL. 1=PROGRAM EDITOR
+*-------------------------------------------------------------------------
+CMDTBL
+       DATA 'FS',0,FS                                                   7-21
+CMDTE  EQU  $-CMDTBL
+TE     EQU  $
+       DATA 'E ',0,CMDXIT
+       DATA 'F ',MODF,COMSTA                                            7-21
+       DATA 'L ',MODL,COMSTA                                            7-21
+       DATA 'SH',MODS,COMSTA                                            7-21
+       DATA 'RE',MRE,RE                                                 7-21
+       DATA 'M ',MML,ML
+S      DATA 'SD',0,SD
+       DATA 'SF',0,SV
+L      DATA 'LF',0,LF                                                   7-21
+F      EQU  $+1
+       DATA 'PF',0,PF
+P      DATA 'P ',MPG,PG
+       DATA 'DF',MDF,DF
+       DATA 'Q ',MQE,QF
+C      DATA 'C ',MCL,CL
+TC     EQU  C
+       DATA 'D ',MDL,DL
+R      DATA 'RS',0,RS                                                   7-21
+       DATA 'S ',MSL,SL
+TT     EQU  $+1
+       DATA 'ET',0,MT
+       DATA 'VF',0,VF
+       DATA 'FO',0,EXIT       CREATE FORMATTER COMMAND
+       DATA 'TO',0,TABOFF
+       DATA 'ST',0,TABON
+       DATA 'H ',MHELP,COMSTA help menu
+       DATA 'JP',MJPH,COMSTA                 show name and continue
+       DATA 'U ',0,UT
+       DATA 'T ',MTAB,COMSTA
+       DATA 'V ',MVER,COMSTA                 version number etc
+       DATA 'CW',MWC,WC
+       DATA 'TE',0,TEDIT      switch to text edit
+       DATA 'SO',0,SDEFLT     save options/defaults
+       DATA 'PE',0,PEDIT      switch to program edit
+       DATA 'O ',MOTHER,COMSTA               list other commands
+       DATA 'I ',0,TINTER     toggle interlace
+       DATA 'EC',0,HELP1
+       DATA 'EK',0,HELP2
+       DATA 'FC',0,HELP3
+       DATA 'CU',0,HELP4
+       DATA 'R ',0,REMIND     3 cheers for jj!
+       DATA 'SP',0,SETPTH     set load path....
+CMDTND
+       EVEN
+       PAGE
+*-------------------------------------------------------------------------
+*      START OF EDITOR
+*-------------------------------------------------------------------------
+START  EQU  $
+* IS THIS THE FIRST TIME THOUGH THE EDITOR EVER?
+       ABS  @EFIRST
+       JEQ  STAR01       SET CURSOR BUT DON'T RECOVER BUFFER
+* ONLY DO THIS 1ST TIME . . .BUFFER RECOVERY
+       ABS  @EDTINI
+       JEQ  STAR09       NOT FIRST TIME . . .
+* RECOVER BUFFER
+       MOV  @SEOF,@EOF
+       MOV  @STBLND,@TBLND
+       MOV  @SEBFND,@EDBFND
+       CLR  @EDTINI
+STAR01
+       BL   @SHDIR            put up the direction flag
+       SETO @EFIRST      NOT THE FIRST TIME ANYMORE
+       LI   R9,>30F0     LOCATION OF CURSOR CHARACTER IN VDP
+       ABS  @PGMEDT      PROGRAM MODE?
+       JEQ  STAR08       NOPE
+       B    @WORD03      MAKE SURE WE ARE IN PROGRAM MODE
+STAR08 B    @WORD10      MAKE SURE WE ARE IN TEXT MODE
+
+STAR09
+       CLR  @EDTINI      NOT THE FIRST TIME ANYMORE
+
+       BL   @CLRTMP
+       MOV  CLINE,R8          Calculate line address
+
+       S    SBIAS,R8
+       LI   R12,86            records are 86 bytes long
+       MPY  R12,R8
+       AI   R9,CPUSCN         Current top of screen pointer
+CPUADR EQU  $-2
+       MOV  R9,@LINADR
+       AI   R9,85
+D85    EQU  $-2
+       MOV  R9,@LINEND
+STAR05 MOV  @EOF,@EOFM1       End of file - 1
+       JNE  STAR10            Eof = 0?
+       MOV  @WDWRAP,@CRFLAG
+       CLR  SBIAS
+       CLR  CLINE                                                       7-21
+       BL   @INSLIN                                                     7-21
+       CLR  @FILCHG           null file don't need to be saved
+       MOV  @CMDRT,R11
+       JEQ  STAR05
+       INC  CLINE
+       JMP  STAR05
+STAR10 DEC  @EOFM1            No
+       BL   @BUMPC            Adjust cursor and windows
+*
+SCREEN
+* SET UP AND DISPLAY THE TAB STOPS AT BOTTOM OF SCREEN
+       LWPI TEMPWS       BE SAFE
+
+       ABS  @TABSTA      DO WE SHOW IT?
+       JNE  RULENO       NOPE.
+
+       LI   R0,MMT1
+       LI   R1,RULER
+RULE01 MOVB *R0+,*R1+
+       CI   R1,RULER+86
+       JNE  RULE01
+
+       LI   R9,RULER
+       BL   @MT99        LET THE PROGRAM SET UP THE INFO
+       MOV  @WPTR*2+SCNWS,R8  R8 IS NOW =   WPTR
+
+       LI   R0,24*80
+*      S    *R8,R0       SCREEN OFFSET
+       LI   R1,RULER
+       LI   R2,80
+       A    *R8,R1       OFFSET INTO RULER STRING.
+       BLWP @VMBWEA      PUT IT UP ON THE SCREEN
+
+RULENO
+       LI   R0,25*80+2
+       LI   R1,LSTFIL
+       LI   R2,40
+       BLWP @VMBWEA           show last filename used
+
+* indicate file saved status
+       DECT R0
+       LI   R1,'  '           default to file is OK
+       ABS  @FILCHG           changed?
+       JEQ  NOCHG
+       MOVB @ASTER,R1         get an asterisk
+NOCHG
+       BLWP @VSBWEA           put character on the screen
+
+* now calculate amount of space free in file
+       MOV  @EDBFND,R8        get top of buffer pointer
+       MOV  @EOF,R1
+       SLA  R1,1         *2
+       A    R1,R8             r8 now has amount of free space
+       AI   R8,280            just under 1/2 of 1% to make it round nicely
+       MPY  @HUNDRE,R8        multiply by 100 for calculating %
+       LI   R7,TBL            size of buffer
+       DIV  R7,R8             r8 now contains % of memory free
+       AI   R8,-100                          (we at MYARC play psych games)
+       ABS  R8                convert to % of memory free <jackass lives>
+       MOV  R8,R9             put in r9 for bindec
+       LI   R10,FREBUF        buffer for number
+       BL   @BINDEC           convert it
+       LI   R4,'00'
+       LI   R0,25*80+47
+       LI   R1,FREBUF+1
+       LI   R2,3
+       CB   *R1,R4            leading zero?
+       JNE  NOZERO            nope
+       MOVB @H20,*R1
+       CB   @1(R1),R4         second position zero?
+       JNE  NOZERO            nope
+       MOVB @H20,@1(R1)
+NOZERO BLWP @VMBWEA           show number
+       LI   R0,25*80+40+10
+       LI   R1,MEMTXT
+       LI   R2,6
+       BLWP @VMBWEA           show associated text
+
+       LWPI SCNWS        BRING BACK THE REGULAR REGS
+*
+* real start of the SCREEN routine as in the original
+*
+SCREE5 EQU  $                 Screen handler routine
+       ABS  @REFRSH           Refresh cpu buffer?
+       JNE  SCRN20
+       ABS  @OVRL
+       JNE  SCRN20
+       CLR  @ICHRF
+       MOV  @EOFONS,R6
+       JEQ  SCRN05
+       CLR  *R6
+       CLR  @EOFONS
+SCRN05 MOV  @SCNLEN,R6        Yes, get screen length
+       MOV  SBIAS,@LINENO     Set up first line number
+       MOV  @TOPSCN,@BUFADR   Set up first cpu address
+*
+SCRN10 EQU  $
+       BL   @GETL20           No get next line
+       JMP  SCRN70            Yes, probably EOF
+       DEC  R6                No, count line
+       JGT  SCRN10
+SCRN20 EQU  $
+       LI   R8,CPUSCN         Routine to write cpu to vdp
+       MOVB *CURADR,CHAR
+       ABS  @HILGT            hi-light mode on?
+       JNE  SCRN21            yes, so don't put up cursor
+       MOVB @CSR,*CURADR
+SCRN21
+       A    *WPTR,R8          Allow for window
+       LI   R6,C24            Always write 24 lines
+       CLR  R9
+       BL   @VADW             Write VDP address 0
+       LI   R12,LINTBL        Special vdp write table
+       JMP  SCRN40
+*
+SCRN70
+       MOV  @LINENO,R9        Eof line number
+       DEC  R9
+       S    SBIAS,R9          Relative screen line number
+       LI   R12,EOFMSG        Adjust vdp line table for
+       SLA  R9,1
+       AI   R9,LINTBL
+       LI   R8,C24            Adjust for command mode
+       S    @SCNLEN,R8        Should be zero unless command mode.
+       SLA  R8,1              Other wise should be 2.
+       A    R8,R9             If 2, add 4 to table address
+       MOV  R12,*R9
+       MOV  R9,@EOFONS        Address of eof message entry
+       MOV  @BUFADR,R9        Handle EOF
+       LI   R8,CPUSND         Blank rest of cpu buffer
+SCRN90 MOVB @BLANK,*R9+
+       C    R9,R8
+       JL   SCRN90
+       JMP  SCRN20            Return to write cpu to vdp
+*
+SCRN30 AI   R8,86             Advance to next line in cpu
+SCRN40 EQU  $
+       LI   R9,80
+       MOV  *R12+,R11         Special screen message?
+       JNE  SCRN50            Yes
+SCRN45 MOV  R8,R11            No, output from cpu buffer
+*
+SCRN50 MOVB *R11+,@VDPWD      Output char to vdp
+       DEC  R9
+       JGT  SCRN50
+       DEC  R6                Line count
+       JGT  SCRN30
+SCRN58 ABS  @FIRST            First time thru
+       JNE  SCRN60            No
+       SETO @FIRST
+       B    @COMAND
+SCRN60
+       MOVB @SVDP,@SAVVDP     Yes, turn on screen
+       MOV  @VDPR1,R9
+       BL   @VAD
+       BL   @FLACSR           Flash cursor, wait for key
+       MOV  @PROMPT,R11       Special return for prompting
+       JEQ  SCRN62
+       RT
+SCRN62 MOVB @KEYCOD,R10
+       JLT  CONTKY            Key greater than >8000
+       CI   R10,>1F00         Key less than >1F00
+       JLT  COMDKY
+       B    @NEWCHR           Character key (>20 - >7F)
+COMDKY MOV  @CMDRT,R0         in command mode?
+       JNE  COMD05             yes, so no external keys allowed..
+       MOVB R10,R0
+       BLWP @CHKKEY           SEE IF EXTERNAL KEY IS AVAILABLE...
+COMD05 LI   R6,BTBL           Command key (Function key)
+COMD10 SRL  R10,7             Calculate address into key table
+       A    R10,R6
+       MOV  *R6,R6
+COMD15 LI   R11,START         Set up return address
+       CLR  R0                Clear error register
+       CLR  @ICHRF            Clear insert character flag.
+       B    *R6               Go
+CONTKY MOV  @CMDRT,R0
+       JNE  CONTK5
+       MOVB R10,R0
+       BLWP @CHKKEY
+CONTK5 LI   R6,CTBL           Control key
+       AI   R10,->8000
+       CI   R10,>2000         Out of range?
+       JLT  COMD10            No
+       LI   R6,CTBL2          Check for control 0,1,...7
+       AI   R10,->3000
+       MOV  R10,R10           Key between >9F, >B0?
+       JLT  BST2              Yes, ignore
+       CI   R10,>800          No, key between >B0,>B7
+       JLT  COMD10            Yes, good key
+       MOV  @CMDRT,R11        Disable lmode in comand mode.
+       JNE  BST2
+       LI   R6,LMODE          Key = >BC  function 0?
+       CI   R10,>C00          Yes, Line number mode
+       JEQ  COMD15            No, bad key
+BST2   B    @START            Yes
+*-------------------------------------------------------------------------
+*  ENTER LINE PROCESSOR
+*-------------------------------------------------------------------------
+ENTER
+       CLR  @TOPPAR
+       MOV  @CMDRT,R6         Command mode?
+       JEQ  ENTR02            No
+       B    *R6               Yes, go to command processor.
+ENTR02 C    CLINE,@EOFM1
+       JLT  ENTR05
+       MOV  @WDWRAP,@CRFLAG
+       ABS  @CRFLAG                                                     10-26 JJ
+       JNE  NEWP01                                                      10-26 JJ
+       JMP  ENTR10                                                      10-26 JJ
+ENTR05 ABS  @CRFLAG           Word wrap mode?
+       JNE  NEWPAR            YES                                       10-26 JJ
+ENTR10
+       CLR  CURSOR            Home cursor
+       BL   @UPDATE
+       LI   R11,START
+       C    CLINE,@EOFM1
+       JGT  ENTR20
+       JEQ  ENTR20
+       ABS  @CRFLAG           Word wrap mode?
+       JEQ  SCROLL            No, go check scroll
+ENTR15 MOV  R11,@LEVEL1
+       B    @AUTO60
+ENTR20 MOV  @EOF,@LINENO
+ENTR30 BL   @INSL10
+       MOV  @WDWRAP,@CRFLAG
+*--------------------------------------------------------------------
+*      Scroll subroutine
+*--------------------------------------------------------------------
+SCRL01 LI   R11,START
+SCROLL INC  CLINE             Scroll routine
+SCRL03 EQU  $
+       MOV  CLINE,R8          Go to next line
+       S    SBIAS,R8
+       C    CLINE,@EOFM1
+       JLT  SCRL04
+       MOV  @EOFM1,CLINE
+       INC  R8
+SCRL04 C    R8,@SCNLEN        Next line on screen?
+       JLT  SCRL07            Yes
+       INC  SBIAS             No, scroll screen
+       CLR  @REFRSH           (Refresh cpu buffer)
+SCRL07 RT
+       PAGE
+*----------------------------------------------------------------       10-15 JJ
+*      THE FOLLOWING IS A FIX SO THAT IF THE ENTER KEY IS               10-15 JJ
+*      PRESSED WHEN POSITIONED IN TEXT ON LAST LINE, A                  10-15 JJ
+*      BLANK LINE IS INSERTED AFTER LAST LINE INSTEAD OF                10-15 JJ
+*      SPLITTING LAST LINE.                                             10-15 JJ
+*----------------------------------------------------------------       10-15 JJ
+NEWP01 MOV  CURADR,R8                                                   10-15 JJ
+       MOV  R8,R9                                                       10-15 JJ
+       S    CURSOR,R9         R9 <- START OF LINE                       10-15 JJ
+       AI   R9,86             R9 <- END OF LINE                         11-18 JJ
+NEWP03 CB   *R8+,@BLANK       FOUND NONBLANK AFTER CURSOR?              10-15 JJ
+       JNE  NEWP05            YES, DO NOT SPLIT                         10-15 JJ
+       C    R8,R9             END OF LINE?                              10-15 JJ
+       JNE  NEWP03            NO, CONTINUE CHECKING                     10-15 JJ
+       JMP  NEWPAR            YES, ALL BLANKS AFTER CURSOR              10-15 JJ
+NEWP05 MOV  R9,CURADR         * FAKE OUT NO SPLIT BY                    10-15 JJ
+       JMP  NEWP20            * SPLITTING AT END OF LINE                10-15 JJ
+*---------------------------------------------------------------------  7-21
+*      Enter key is New paragraph.                                      7-21
+*--------------------------------------------------------------------   7-21
+NEWPAR EQU  $                                                           7-21
+       SETO @NCHAR            insure Edit buffer gets updated           7-21
+       SETO @CRFLAG                                                     7-21
+       LI   R9,TEMPM6                                                   7-21
+       A    CURSOR,R9                                                   7-21
+       CB   *CURADR,@CR       Put Cr on current line.                   7-21

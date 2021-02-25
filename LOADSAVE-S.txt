@@ -1,0 +1,576 @@
+       EVEN
+
+       IDT  'LOADSAVE'
+       DEF  LOAD01,SAVE01
+       DEF  CLOSE
+       DEF  PF01,QF01,SD01
+       DEF  DF01,PG01,VF01
+       DEF  UT01
+       DEF  LFLAG,FFLAG                 SEE REF PARSXX BELOW            11-22 JJ
+       DEF  MIND01            for remind-me
+       DEF  LSTFIL                                                      11-22 JJ
+
+       REF  SCRLL                 80 COLUMN SCROLL W/ DELAY IN TIW FILE
+       REF  PGMEDT       TO CONTROL TAB SAVE IN PROGRAM EDIT MODE
+       REF  DSRLST       MY QUICK DSR ENTRY . . .FOR USE _AFTER_ OPEN
+       REF  COMAND            included so SD can return to comman line
+       REF  FILCHG            file changed flag
+       REF  BINDEC            routine in BUFMGR to convert word to string
+       REF  LINF              flag in EDIT/1 for line numbers on/off
+       REF  CTXEND            data for end of line buffer pointer . . .
+
+       REF  TBL,TBLND,EDITBF,EDBFND
+       REF  SEOF,STBLND,SEBFND
+       REF  C,L,F,PARSEB,FORM0                                          8-24
+       REF  IOERR,IONUM,ERRLIN
+       REF  CTEXT,CPUSCN,START,FLACSR
+       REF  CMDXIT,REFRSH,SLASH
+       REF  Y,EXIT2,VDPTBL
+       REF  S,A,EDTXIT,CMDRT,VAD
+       REF  PARSEA,CNT,STRING,STRL
+       REF  NUM1,NUM2,NUM3,NUMCHK
+       REF  NUM,NUMBER
+       REF  COLNUM
+       REF  EOF,LINBF0,LINBUF,BUFADR,LINENO
+       REF  GETLN,INSTLN,DSR$,BLANK
+       REF  VMBW$,VADW,VMBW10,STRL1,MOVE05
+       REF  LEVEL1,LINBND,VDPWD$,ERRM10
+       REF  DISPLY,MQF,NXDIG
+       REF  SDEVNM,SFILNM
+       REF  RESDEV,RESFIL,SAVFIL,SAVDEV
+       REF  SCNWS,SKIPBK,SKIP10                                         10-15 JJ
+       REF  CRFLAG                                                      9-23 JJ
+       REF  SREGS,SREGS2                                                9-24 JJ
+       REF  SAVER0            PASSED FROM PARSE TO LOADFILE             10-6 JJ
+       REF  MASK              DISABLE FCTN = AFTER SHOW DIR             10-15 JJ
+       REF  PARSXX            USED TO MOVE CODE FROM LOADSAVE           11-22 JJ
+*                             TO REDUCE SIZE OF LOADSAVE  JJ            11-22 JJ
+*-------------------------------------------------------------------------
+CLINE  EQU  1
+CURSOR EQU  2
+SBIAS  EQU  3
+VDPRD  EQU  >8800
+GPLWS  EQU  >83E0
+VDPPAB EQU  >2000   JPH WAS >0680
+SCNAME EQU  >8356
+BADNAM EQU  >F
+SYNTAX EQU  >E
+MEMFUL EQU  >9
+TWO    DATA 2                 could be ref'ed into EDIT
+D10
+CPUPAB DATA 10                Count for the # bytes to move
+PABOC  BYTE 0                 Op code
+PABST  BYTE 0                 Status
+PABBAD DATA VDPPAB+80         Buffer address
+PABLRL BYTE 80                Logical recode length
+PABCCT BYTE 80                Character count
+PABRN  DATA 0                 Record number
+PABSO  BYTE 0                 Screen offset
+PABNL  BYTE 0                 Name length
+SLRL   DATA >5050             Default logical record length
+READ   BYTE 2
+WRITE  BYTE 3
+MASK80 BYTE >80                                                         8-24
+STARTL DATA 0
+STOP   DATA 0
+LREAD  DATA 0
+PFLAG  DATA 0                 For saving tabs flag.                     8-24
+       EVEN
+COMMA  BYTE ','
+CFLAG  DATA 0
+LFLAG  DATA 0
+FFLAG  DATA 0
+LSTFIL TEXT '                    '  buffer for last file used name
+       TEXT '                    '  40 spaces in total
+SAVEP  BYTE 0                 SAVE PAGE THAT WAS IN CATALOG SPACE
+H20    BYTE >20
+MAP4A  EQU  >8000             ADRESSS OF THE MAPPER
+       EVEN
+*-------------------------------------------------------------------------
+*      Load file after line number.
+*------------------------------------------------------------------------
+LOAD00 MOV  @NUM1,@STARTL User enterred 2 numbers for start and stop.
+       MOV  @NUM2,@STOP   Load all of file.
+       C    @STARTL,@STOP
+       JH   ERROR         JHE -> JH     11-17 JJ                        11-17 JJ
+LOAD0  BL   @PURGE
+       JMP  LOAD06
+
+LOADSF
+       BL   @PURGE
+       BL   @SAVEFN           save the filename in buffer
+       JMP  LOAD06            continue
+
+LOAD01
+CHECKS EQU  $-2
+*
+LCHK2  CLR  @PFLAG            For updating tab record                   8-24
+       BL   @SAVFIL
+       BL   @PARSEA       CNT = line number, String -> name
+       CLR  @LINENO       Merge line number.(from source)
+       CLR  @STARTL        Start line number (from destination)
+       SETO @STOP          Stop line number (from destination)
+       DEC  @STOP
+       BL   @OPEN         * CHECK FILE PATHNAME                         11-17 JJ
+       DATA >0014         * BEFORE PURGE    11-17 JJ                    11-17 JJ
+       JMP  LOAD50        *                                             11-17 JJ
+LOAD10 CLR  R9                                                          11-17 JJ
+       MOV  @NUM1,R0      Any line numbers enterred?                    10-5 JJ
+       JLT  LOADSF        No, use defaults.
+       INC  @NUM1                                                       10-5 JJ
+       INC  @NUM2                                                       10-5 JJ
+       INC  @NUM3                                                       10-5 JJ
+       MOV  @NUMCHK,R0    How many numbers enterred?                    10-5 JJ
+       JGT  LOAD03        One, so file merge.
+       JEQ  LOAD00        Two, so load piece of file.
+       MOV  @NUM3,@STOP   Three, so merge piece of file.
+       MOV  @NUM2,@STARTL
+       C    @STARTL,@STOP                                               11-22 JJ
+       JH   ERROR                                                       11-22 JJ
+LOAD03 MOV  @NUM1,@LINENO File merge.
+       MOV  @SAVER0,R0    LINE NUMBER 0?                                10-5 JJ
+       JNE  LOAD05        NO                                            10-5 JJ
+       DEC  @LINENO       YES                                           10-5 JJ
+LOAD05 C    @LINENO,@EOF                                                10-5 JJ
+       JH   ERROR
+LOAD06 CLR  R9
+       S    @STARTL,@STOP START LINE > STOP LINE?                       11-22 JJ
+       INC  @STOP
+       CLR  @LREAD       #lines read from file.
+LOAD12 BL   @VINIT
+       MOVB @READ,@PABOC Read op code
+       BL   @IO          Go read a record.
+       JMP  ERROR        Load error, code in R9
+LOAD20 BL   @V2C         Move buffer to cpu
+       LI   R0,LINBUF
+       MOVB *R0,R11                                                     8-24
+       JLT  TABRCD                                                      8-24
+       INC  @LREAD                                                      8-24
+       MOV  R0,@BUFADR
+       C    @LREAD,@STARTL   Time to insert line?
+       JLT  LOAD12       No, insert into buffer.
+LOAD25 BLWP @INSTLN      Insert line
+LOAD40 DEC  @STOP
+       JH   LOAD30
+       BL   @CLOSE
+       JMP  ERR02
+       JMP  ERR02
+LOAD30 MOV  R0,R9
+       JEQ  LOAD12
+ERROR  LI   R12,1
+ONE    EQU  $-1
+       CI   R9,5         End of file error
+       JNE  ERR05        Ignore this.
+ERR02  CLR  @CRFLAG                                                     9-23 JJ
+       B    @EXIT        CHANGE IS MOVING ERR02 LABEL                   9-23 JJ
+ERR05  LI   R10,IONUM    Convert error code to ascii
+       BL   @NXDIG
+       LI   R10,IOERR    Output ioerr message.
+       MOV  R10,@ERRLIN
+       BL   @CLOSE
+       NOP
+ERR10  B    @ERRM10
+LOAD50 BL   @OPEN
+       DATA >0004
+       JMP  ERROR
+       JMP  LOAD10
+* DECODE TAB RECORD (TURN OFF HIGH BIT)                                 8-24
+TIWV20 BYTE >FC               tag for v2.0 of TIW tab record
+       BYTE 0                                [safe keeping]
+TABRCD ABS  @PGMEDT
+       JNE  LOAD12            ignore tab record if in program editor
+       ABS  @PFLAG                                                      8-24
+       JEQ  LOAD12       Ignore tab record  (no purge)                  8-24
+       CB   *R0,@TIWV20       are we in version 2.0?
+       JNE  NOTV20
+       INC  R0                +1 for TIW V2.0 and all should be fine.
+NOTV20 LI   R6,22                                                       8-24
+       LI   R10,FORM0
+TABR10 SZCB @MASK80,*R0                                                 8-24
+       MOVB *R0+,*R10+                                                  8-24
+       DEC  R6                                                          8-24
+       JGT  TABR10                                                      8-24
+       JMP  LOAD12                                                      8-24
+*-------------------------------------------------------------------------
+       PAGE
+*-------------------------------------------------------------------------
+*      Save file in variable 80 format
+*-------------------------------------------------------------------------
+PF01   EQU  $
+       SETO @PFLAG            Purge or print flag (tab record)          8-24
+       SETO @CFLAG            Control (Strip out)
+       CLR  @LFLAG            Line numbers (print)
+       CLR  @FFLAG            Fixed 80
+       LI   R8,CTEXT
+PF05   BL   @SKIP10           skip leading blanks                       10-15 JJ
+       CB   *R8,@C            Check for C
+       JNE  PF10
+       CLR  @CFLAG            Yes, skip past comma
+PF07   INC  R8
+       JMP  PF05
+PF10   CB   *R8,@F            L = line?
+       JNE  PF20              No
+       SETO @FFLAG            Yes, skip past comma
+       JMP  PF07
+PF20   CB   *R8,@L            Fixed 80 format?
+       JNE  PF30
+       SETO @LFLAG
+       JMP  PF07
+PF30   EQU  $
+       BL   @PARSEB           Parse rest of line.
+       BL   @SAVDEV           Save device.
+       JMP  SAVE03
+QF01   EQU  $                 Quit edit session
+       LI   R8,CTEXT
+SAVE01
+       CLR  @PFLAG            Tab record flag.                          8-24
+       BL   @SAVFIL
+       SETO @CFLAG            Do not strip out control characters.
+       BL   @PARSXX           String -> filename, colsta = first line   11-22 JJ
+       C    @NUMCHK,@TWO      any numbers entered?
+       JNE  SAVE03            yup.
+       BL   @SAVEFN           save filename
+SAVE03 CLR  R9                NUM1 = first line.
+SAVE04 MOV  @NUM1,R8
+       JGT  SAVE05
+       JEQ  SAVE05
+       B    @SAV10
+SAVE05 ABS  @NUMCHK           Either 2 or no numbers enterred.
+       JNE  ERROR             Else error.
+       MOV  @NUM2,R10
+SAVE10 C    R8,R10            first line > last line?
+       JH   ERROR             Yes, error.   JHE->JH  11-17 JJ           11-17 JJ
+       C    R10,@EOF          No, is last line > End of file?
+       JGT  SAV20             Yes, make it end of file.
+SAVE20 EQU  $
+       ABS  @FFLAG            Fixed 80 flag set?
+       JEQ  SAVE22            No, go variable 80
+       BL   @OPEN             Yes, go fixed 80.
+       DATA >0002
+SAVE21 JMP  ERROR
+       JMP  SAVE24
+SAVE22 BL   @OPEN             Open file for output, variable 80.
+       DATA >0012
+       JMP  SAVE21            <JMP ERROR...was a range error>
+SAVE24 MOV  @NUM1,@LINENO
+SAVE30 LI   R0,LINBF0         Set up buffer address for get line
+       MOV  R0,@BUFADR
+       C    @LINENO,@NUM2     End of save ?
+       JH   SAVE97            Yes, quit                                 8-24
+       BLWP @GETLN            Get line
+       MOV  R0,R0             Error?
+       JNE  SAVE97            Yes, probably End of file.                8-24
+
+       LI   R14,80            Scan line for last blank.
+       ABS  @FFLAG            Fixed 80?
+       JNE  SAVE60            Yes.
+       LI   R13,LINBND        Start at the end of line
+SAVE40 EQU  $
+       DEC  R13
+       CI   R13,LINBUF        Beginning of line?
+       JL   SAVE50            Yes, must be a blank line.
+       CB   *R13,@BLANK       Blank?
+       JNE  SAVE60            No, found a non blank.
+       DEC  R14               Adjust line length count
+       JMP  SAVE40
+SAVE50 CLR  R14               Blank line
+SAVE60 ABS  @CFLAG            Strip out control?
+       JNE  SAVE66            No
+       MOV  R14,R15           Yes, Get count
+       LI   R13,LINBUF
+SAVE62 CB   *R13+,@BLANK      See if less than blank?
+       JGT  SAVE64            No
+       DEC  R13               Yes, write a blank.
+       MOVB @BLANK,*R13+
+SAVE64 DEC  R15
+       JGT  SAVE62
+SAVE66 ABS  @LFLAG
+       JEQ  SAVE68
+       AI   R14,6
+       CI   R14,80
+       JLT  SAVE68
+       LI   R14,80
+SAVE68 SWPB R14               Adjust count in PAB
+       MOVB R14,@PABCCT
+       MOVB @WRITE,@PABOC
+       BL   @C2V
+       BL   @IO
+       JMP  BERR2
+       JMP  SAVE30
+SAVE97 ABS  @PFLAG                                                      8-24
+       JNE  SAVE99                                                      8-24
+       ABS  @PGMEDT      IN PROGRAM EDIT MODE?
+       JNE  SAVE99       DON'T SAVE TABS THEN
+       LI   R14,22                                                      8-24
+       LI   R13,LINBUF                                                  8-24
+       LI   R11,FORM0                                                   8-24
+SAVE98 EQU  $                                                           8-24
+       MOVB *R11+,*R13        TURNING ON HIGH BIT                       8-24
+       SOCB @MASK80,*R13+                                               8-24
+       DEC  R14               SO E/A CAN SEE IT.                        8-24
+       JGT  SAVE98                                                      8-24
+       LI   R14,>1600         WRITE OUT TAB RECORD                      8-24
+       MOVB R14,@PABCCT                                                 8-24
+       MOVB @WRITE,@PABOC                                               8-24
+       BL   @C2V                                                        8-24
+       BL   @IO                                                         8-24
+       JMP  BERR2                                                       8-24
+SAVE99 BL   @CLOSE
+       NOP                    Ignore any close error.
+EXIT   B    @CMDXIT
+BERR2  B    @ERROR
+SAV10  CLR  @NUM1
+       DECT @NUMCHK           No numbers enterred, use default.
+SAV20  MOV  @EOF,@NUM2        Load all of file.
+       B    @SAVE04                                                     8-24
+       PAGE
+*-------------------------------------------------------------------------
+*      Delete file
+*-------------------------------------------------------------------------
+DF01   BL   @PARSEA           Get file name
+       BL   @OPEN             Won't really open, fake delete.
+H07    DATA >0700
+       JMP  BERR2             If error come here
+       JMP  EXIT              If not, done.
+*-------------------------------------------------------------------------
+*      Show directory
+*-------------------------------------------------------------------------
+SD01
+       MOVB @MAP4A+1,@SAVEP
+       MOVB @CATPAG,@MAP4A+1
+       BLWP @>2000            SHOW THE CATALOG
+SD02   MOVB @SAVEP,@MAP4A+1
+       B    @COMAND           go back to command line. Big thanks McGoverns
+
+*-------------------------------------------------------------------------
+*      SUBROUTINE TO DO IO
+*-------------------------------------------------------------------------
+CLOSE  MOVB @ONE,@PABOC
+IO     EQU  $
+       MOV  R11,@LEVEL1
+IO05   LI   R9,VDPPAB         Write the pab for I/O
+       LI   R8,CPUPAB+1
+       BL   @VMBW$
+       LI   R8,VDPPAB+9       Set up for dsr link.
+       MOV  R8,@SCNAME
+       CB   @PABOC,@H07+1     OPEN ?????
+       JEQ  IO90              YES . . USE SLOW DSRLNK
+       CB   @PABOC,@H07       DELETE?????
+       JEQ  IO90              yup . . use full dsrlnk
+       BLWP @DSRLST           NOPE. . USE LAST DSR ACCESSED . ..
+       JNE  IO10              error?   NO?
+       JMP  IO92              CONTINUE AS IT WAS . . .
+IO90
+       BLWP @DSR$           Error?
+       JNE  IO10              No
+IO92   LI   R9,BADNAM         Yes
+       JMP  IO20              Exit
+IO10   LI   R9,VDPPAB         Read back the pab for I/O
+       LI   R6,10
+       LI   R8,PABOC
+       BL   @MOVE05
+       MOVB @PABST,R9         Check error code.
+       SRL  R9,13
+       JNE  IO20              Must have error.
+       INCT @LEVEL1           No error, return
+IO20   MOV  @LEVEL1,R11
+       RT
+*-------------------------------------------------------------------------
+*      Open file, using String pointers, etc.
+*-------------------------------------------------------------------------
+OPEN   EQU  $
+       MOV  *R11+,@PABOC      Get opcode, and status
+       MOV  R11,@LEVEL1       Set up return for IO05
+       MOV  @STRING,R8        String -> file name
+       DEC  R8
+       MOVB @STRL1,*R8        Overwrite length
+       MOVB *R8,@PABNL        Set up length in cpu pab
+       CLR  @PABRN            set record number to zero on open
+       LI   R9,VDPPAB+10      Write name in vdp pab
+       BL   @VMBW$
+       MOV  @SLRL,@PABLRL     Restore cct and lrl
+       JMP  IO05              Let IO do the work.
+*-------------------------------------------------------------------------
+*      Subroutines for vdp access
+*-------------------------------------------------------------------------
+VINIT  EQU  $
+       MOV  R11,R14
+       MOV  @PABBAD,R9        Address of pab buffer
+       BL   @VADW
+       LI   R6,80             80 bytes long
+VIN10  MOVB @BLANK,@VDPWD$    Blank it.
+       DEC  R6
+       JGT  VIN10
+       B    *R14
+
+C2V    EQU  $
+       MOV  R11,R14           Save return address
+       LI   R8,LINBUF         Write from linbuf to pab buffer
+       ABS  @LFLAG
+       JEQ  C2V10
+       LI   R8,LINBF0
+C2V10  MOV  @PABBAD,R9
+       BL   @VADW             Output vdp address
+       LI   R9,80
+       B    @VMBW10           Let VMBW to the move.
+
+V2C    EQU  $
+       LI   R8,LINBUF
+       LI   R6,80
+V2C10  MOV  @PABBAD,R9
+       B    @MOVE05
+
+PURGE  MOV  @EOF,@SEOF
+       MOV  @TBLND,@STBLND
+       MOV  @EDBFND,@SEBFND
+       CLR  @EOF          Purge the edit buffer.
+       LI   R0,TBL
+       MOV  R0,@TBLND
+       LI   R0,EDITBF
+       MOV  R0,@EDBFND
+
+       LI   R0,LSTFIL
+PURGE1 MOVB @H20,*R0+         null out "last file used" field
+       CI   R0,LSTFIL+36
+       JNE  PURGE1
+
+       CLR  R0
+       CLR  CLINE        NECESSARY? JJ                                  9-24 JJ
+       CLR  SBIAS        NECESSARY? JJ                                  9-24 JJ
+       CLR  @SREGS2      POSITION CURSOR TO 1ST COLUMN                  9-24 JJ
+       SETO @PFLAG                                                      8-24
+       CLR  @FILCHG           indicate that file is pure again . . .
+       RT
+PG01   BL   @SKIPBK      SKIP OVER LEADING BLANKS                       10-15 JJ
+       CB   *R8,@Y
+       JNE  PG10
+       BL   @PURGE
+PG10   B    @EXIT
+
+*------------ CODE TO HIT THE UTILITY LOADER ---------
+
+UT01   BL   @PARSEA
+       MOV  @STRING,R0
+       DEC  R0
+       MOVB @STRL1,*R0        patch in length byte
+*
+       MOV  @EOF,@SEOF        save info in case this is MW utility...
+       MOV  @TBLND,@STBLND
+       MOV  @EDBFND,@SEBFND
+*
+       LI   R5,SCNWS
+*
+       BL   @>6010            go to pointed program loader
+       JMP  GOVF90            get out
+
+*-------------JPH CODE TO DO View File BASED ON LOAD CODE --------
+
+KENTXT TEXT '* End of File *   Enter to'  26 BYTES
+       TEXT ' Continue'       =35 bytes total
+       EVEN
+LINCNT BSS  2                 line counter
+
+VF01
+       CLR  @LINCNT           set counter to naught
+
+       BL   @PARSEA       CNT = line number, String -> name
+       BL   @OPEN
+       DATA >0014
+GOVF90 JMP  VF90              <file is not closed . . . . >
+       BL   @CLS              clear screen
+
+VF03
+       BLWP @SCRLL                SCROLL THE SCREEN
+
+VF06   CI   R0,>000F          BACK KEY . . . ACCCORDING TO PAUL
+       JEQ  VFEX
+
+VF00   BL   @VINIT
+       MOVB @READ,@PABOC Read op code
+       BL   @IO          Go read a record.
+       JMP  VFEX         error, code in R9
+       BL   @V2C         Move buffer to cpu
+       LI   R1,LINBUF         put numbers before the text
+       AI   R1,-6                            <almost dangerous>
+       INC  @LINCNT           count the line
+       MOV  @LINCNT,R9        get the number
+       MOV  R1,R10
+       BL   @BINDEC           put line number at start of the line
+       LI   R0,23*80
+       MOVB @PABOC+5,R2
+       SRL  R2,8
+       ABS  @LINF             show line numbers?
+       JNE  VF75               yes . . .
+       MOV  R2,R2             null string?
+       JEQ  VF03               don't show
+       AI   R1,6              point to after numbers . . . .
+       JMP  VF80               and now show it . .
+VF75   AI   R2,6              count the line numbers . . .
+       CI   R2,81             line now too long?
+       JL   VF80
+       LI   R2,80             set to max length . .
+VF80   BLWP @VMBWEA
+       JMP  VF03
+
+VFEX   BL   @CLOSE
+       NOP
+
+VF99   LI   R0,23*80+6
+       LI   R1,KENTXT
+       LI   R2,35
+       BLWP @VMBWEA
+
+VF09   BLWP @KSCANE
+       MOVB @>8375,R0
+       SRL  R0,8
+       CI   R0,13
+       JNE  VF09
+
+VF90
+       B    @COMAND           return to the command line
+
+       COPY "REMIND-S1"
+
+***************************************
+* STICK FILENAME IN MY BUFFER FOR SCREEN DISPLAY
+SAVEFN
+       CLR  @FILCHG
+       LI   R14,LSTFIL
+SAVEF0 MOVB @H20,*R14+        first space out the field
+       CI   R14,LSTFIL+35
+       JNE  SAVEF0
+
+       MOV  @STRING,R9        then get the string pointer
+       MOVB @STRL1,R6         get length byte
+       JEQ  SAVEF3            ignore null field
+       SRL  R6,8              make it a word
+       CI   R6,35             too long?
+       JGT  SAVEF2            yup
+       LI   R6,35             make it longest allowed
+SAVEF2
+       LI   R14,LSTFIL
+SAVEF1
+       CB   *R9,@H20          space?
+       JEQ  SAVEF3            yea, so don't copy rest of name
+       MOVB *R9+,*R14+        move the filename
+       CI   R14,LSTFIL+35
+       JNE  SAVEF1
+SAVEF3 RT
+
+* quickie routine to clear the screen
+
+CLS    LI   R0,2*80      CLEAR THE SCREEN . . .EXCEPT TOP AND BOTTOM
+*                             TWO LINES
+       LI   R1,'  '
+       LI   R3,80*22
+CLS1   BLWP @VSBWEA
+       INC  R0
+       DEC  R3
+       JNE  CLS1
+       RT
+
+       COPY "UTILS-S"
+       COPY "PAGES"
+
+       END
+

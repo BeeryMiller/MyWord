@@ -1,0 +1,62 @@
+*
+* PaulC 8/4/1988
+*
+* the quick and dirty: convert float to string
+*      in:  r1 = ^ 8 byte float
+*           r2 = ^ area for string (at least 20 bytes)
+*      out: ^r2 = ascii string, nil terminated
+*                 if float is negative, trashes it. (ABS first word)
+*
+CNSREG BSS  32
+*D10    DATA 0           charlton bug...
+CNS    DATA CNSREG,$+2
+       MOV  @2(R13),R1
+       MOV  @4(R13),R2
+*
+       MOV  *R1,R3            get leading word
+       JEQ  CNSZER
+       JLT  CNSNEG
+       JMP  CNSPOS
+*
+CNSNEG LI   R0,'- '
+       MOVB R0,*R2+
+       ABS  *R1
+*
+CNSPOS MOV  *R1,R3            now to get number of digits
+       SRL  R3,8
+       AI   R3,->0040         subtract bias
+       JLT  CNSZER            we don't do fractions...only integers
+*
+       MOV  R1,R4
+       INC  R4
+       SETO R0                flag for first digit in number
+*
+CNSL00 CLR  R5
+       MOVB *R4+,R6
+       SRL  R6,8
+       DIV  @D10,R5           now r5=high digit, r6= low digit
+       MOV  R5,R5
+       JNE  CNSJ00
+       MOV  R0,R0             test for leading digit
+       JNE  CNSJ01            it is first digit, ignore it.
+*
+CNSJ00 AI   R5,'0'            convert it to a digit
+       SLA  R5,8
+       MOVB R5,*R2+
+*
+CNSJ01 CLR  R0                first digit has been processed
+       AI   R6,'0'
+       SLA  R6,8
+       MOVB R6,*R2+
+*
+       DEC  R3
+       JOC  CNSL00            there are more bytes with sig. digits
+*
+       JMP  CNSRET
+*
+CNSZER LI   R0,'0 '
+       MOVB R0,*R2+           return a character
+CNSRET CLR  R0
+       MOVB R0,*R2            return the NIL terminator
+       RTWP
+*

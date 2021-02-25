@@ -1,0 +1,75 @@
+CFI    DATA CSNWS,CFI00
+
+LW100  DATA 100
+
+ERROV  EQU  >03               INTEGER OVERFLOW CODE
+SGNBIT EQU  >8000
+*-------------------------------------------------------------------------
+CFI00
+       MOV  @FAC,R4           IS NUMBER ZERO
+       JEQ  CFI12             ALL DONE
+       CLR  R0
+       LI   R2,FAC+1          LOAD POINTER WITH HIGH ORDER BYTE OF FAC
+       CLR  R3                CLEAR FRACTION
+       ABS  @FAC              MAKE SURE FIRST DIGIT IS POSITIVE
+       CLR  R5                CLEAR EXPONENT
+       MOVB @FAC,R5           GET EXPONENT
+       CI   R5,>3F00          IS NUMBER LESS THAN ONE
+       JLT  CFI11             YES NUMBER < .01      - RESULT = 0
+       JEQ  CFI03             NUMBER > .01 AND < 1  - RESULT = 1
+       CI   R5,>4100          IS NUMBER LESS THAN 100,000
+       JLT  CFI02             IT IS BETWEEN 1 AND 100
+       JEQ  CFI01             IT IS BETWEEN 100 AND 10,000
+       CI   R5,>4200          IS NUMBER TO BIG TO CONVERT
+       JH   CFI08             YES IT IS
+       MOVB *R2+,R0           GET DIGIT
+       SRL  R0,8              ALIGN
+       MPY  @LW100,R0         RADIX TO BINARY
+       MOV  R1,R0             GET RESULT FOR NEXT DIGIT
+CFI01  MOVB *R2+,R3            GET NEXT DIGIT
+       SRL  R3,8              ALIGN
+       A    R3,R0             ADD TO PREVIOUS RESULT
+       MPY  @LW100,R0         RADIX TO BINARY
+       MOV  R0,R0             TEST FOR OVERFLOW
+       JNE  CFI08             YES ERROR
+       MOV  R1,R0             GET RESULT FOR LAST DIGIT
+       JLT  CFI08             OVERFLOW
+CFI02  MOVB *R2+,R3           GOT LAST DIGIT TO LEFT OF DECIMAL
+       SRL  R3,8              ALIGN
+       A    R3,R0             ADD TO RESULT
+CFI03  CB   *R2+,@LW50H       IS ROUNDING NECESSARY
+       JLT  CFI06             NO PUT ON PROPER SIGN
+       JGT  CFI05             YES ADD A 1 TO IT
+       MOV  R4,R4
+       JGT  CFI05             NUMBER IS POSITIVE ROUND UP
+CFI04  MOVB *R2+,R3
+       JNE  CFI05             NONZERO ROUND UP
+       CI   R2,FAC+8          LOOK AT REST OF DIGITS
+       JL   CFI04             NO LOOK AT NEXT ONE
+       JMP  CFI06             ROUND DOWN
+*
+*    SOME DATA STATEMENTS TO CONFUSE
+*
+LW50H  BYTE 50
+ERRI   BYTE ERROV
+*
+*    NOW BACK TO THE PROGRAM
+*
+CFI05  INC  R0                ROUND UP
+CFI06  CI   R0,SGNBIT         IS RESULT 32768
+       JL   CFI09
+       JH   CFI08
+       MOV  R4,R4             IS NUMBER NEGATIVE
+       JLT  CFI10
+CFI08  MOVB @ERRI,@FAC+10     ERROR CODE
+       JMP  CFI12
+*
+*
+*
+CFI09  INV  R4                IS NUMBER NEGATIVE
+       JLT  CFI11             NO RETURN POSITIVE
+CFI10  NEG  R0
+CFI11  MOV  R0,@FAC           RETURN NUMBER IN FAC
+CFI12
+       RTWP
+

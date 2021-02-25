@@ -1,0 +1,63 @@
+CTBL$  DATA START        (80) ' KEY                                     7-21
+       DATA ROLLUP       (81) A KEY  Roll up
+       DATA ROLDWN       (82) B KEY  Roll down
+       DATA COMAND       (83) C KEY  center line of text.
+       DATA CHDIR        (84) D KEY  change search direction
+       DATA GOREND       (85) E KEY  Up arrow
+       DATA DELCHR       (86) F KEY  Delete character
+       DATA INSCHR       (87) G      Insert character
+       DATA LASTP        (88) H Last paragraph
+       DATA TAB          (89) I TAB
+       DATA NEXTP        (8A) J Next paragraph
+       DATA CTOEOL       (8B) K Clear to end of line
+       DATA HOMCSR       (8C) L Home cursor
+       DATA INDENT       (8D) M Goto column 1.                          7-21
+       DATA DELLIN       (8E) N delete line as per TIW
+       DATA INSERT       (8F) O Insert line
+       DATA PAGE         (90) P DELETE CHAR                             7-21
+       DATA LINE1        (91) Q goto line 1
+       DATA GORMRG       (92) R align right
+       DATA TABTOG            S (back arrow) toggle display of tab stops
+       DATA BACKTB       (94) T BACK TAB
+       DATA CMODE        (95) U CONTROL CHAR MODE                       7-21
+       DATA GOTO1        (96) V Goto col 1
+       DATA TABWD
+       DATA DWNAR             X HELP KEY
+       DATA GOLEFT            Y Dummy blank.
+       DATA SHOEND (OOPS)     Z (Restore line) end of file
+       DATA START        (9B) .
+       DATA START        (9C) ;
+       DATA EXIT0        (9D) =              formatter
+       DATA INDENT       (9E) 8 New paragraph                           7-21
+       DATA PAGE         (9F) 9 New page
+*CTBLND EQU  $
+*CTBL2  EQU  $            control keys.
+       DATA WORDW        (B0) 0 WORD WRAP MODE                          7-21
+       DATA OOPS         (B1) 1 OOPS KEY                                7-21
+       DATA REFRMT       (B2) 2 reformat
+       DATA COLORC       (B3) 3 CHANGE COLOR                            7-21
+       DATA NEXTP        (B4) 4 find next paragraph
+       DATA DUPLIC       (B5  5 duplicate previous line
+       DATA LASTP         B6  6 find last paragraph
+       DATA TABWD         B7  7 tab to next word
+*CTBL2L EQU  $
+*      KEY CODE TABLE FOR FUNCTION KEYS 0->F
+*BTBL   EQU  $-2           Use to be   is
+       DATA TAB          (01) A key   Func 7
+       DATA ROLLUP       (02) C key        4
+       DATA DELCHR       (03) F key        1
+       DATA INSCHR       (04) G key        2
+       DATA EXIT0        (05) Q key        =   direct entry to formatter
+       DATA INSERT       (06) R key        8
+       DATA DELLIN       (07) T key        3
+       DATA LFTAR        (08) S key        S
+       DATA RGTAR        (09) D key        D
+       DATA DWNAR        (0A) X key        X
+       DATA UPAR         (0B) E key        E
+       DATA ROLDWN       (0C) V key        6
+       DATA ENTER        (0D) Enter
+*      DATA NXTSCN       (0E) W key        5  WE AT MYARC DISLIKE
+       DATA START        (0E) W key        5
+       DATA COMAND       (0F) Z key        9
+*BTBLND EQU  $
+*-------------------------------------------------------------------------

@@ -1,0 +1,100 @@
+CHKEXT DATA TEMPWS,CHKE00
+CHKKEY DATA TEMPWS,CHKK00
+*
+CHKK00 CLR  R4
+       MOVB *R13,R4
+       LI   R6,6
+       JMP  CHKE05
+*
+CHKE00 MOV  *R13,R5
+       MOVB @1(R5),R4
+       SWPB R4
+       MOVB *R5,R4
+       LI   R6,8
+*
+CHKE05 LI   R9,>0E04
+*
+CHKE10 MOV  R9,R0
+       BLWP @VWTREA
+       LI   R0,4
+       BLWP @VSBREA
+       SWPB R1
+       MOVB @>8800,R1
+       CI   R1,'pJ'
+       JNE  CHKE40
+       MOV  R6,R0
+       BLWP @VSBREA
+       SWPB R1
+       MOVB @>8800,R1
+       SWPB R1
+       JEQ  CHKE40
+       ANDI R1,>1FFF
+*
+       MOV  R1,R0
+       DEC  R0
+       BLWP @VSBREA
+       SWPB R0
+*
+CHKE20 MOVB @>8800,R1
+       SWPB R1
+       MOVB @>8800,R1
+       SWPB R1
+
+       MOVB @>8800,R7
+       SWPB R7
+       MOVB @>8800,R7
+       SWPB R7
+
+       C    R1,R4
+       JEQ  CHKE35
+       MOV  R1,R1
+       JNE  CHKE20
+       JMP  CHKE40
+
+CHKE35 MOVB @>8000,R5
+       CI   R6,6
+       JNE  CHKE36
+       MOV  @11*2(R13),R14    use R11 of caller as return address for keys...
+       LWPI SCNWS
+       BL   @UPDATE           make sure this line is changed in buffer...
+       LWPI TEMPWS
+       BL   @SAVEWS
+*
+CHKE36 MOVB @UTILPG+1,@>8000
+       CLR  R0
+       CLR  R1
+       LI   R2,>2000
+       BLWP @VMBREA
+       MOVB @UTILPG+2,@>8000
+       CLR  R0
+       LI   R1,>2000
+       MOV  R1,R2
+       BLWP @VMBREA
+       MOVB R5,@>8000
+       LI   R0,>0E00
+       BLWP @VWTREA
+       MOV  @EOF,@SEOF
+       MOV  @TBLND,@STBLND
+       MOV  @EDBFND,@SEBFND
+
+       LI   R0,>8300
+       LI   R1,CHKE90
+CHKE37 MOV  *R1+,*R0+
+       CI   R1,CHKE91
+       JNE  CHKE37
+
+       MOV  R7,@>83E0
+       LWPI >83E0
+       B    @>8300
+
+CHKE90 MOVB @UTILPG+1,@>8005
+       MOVB @UTILPG+2,@>8006
+       B    *R0
+CHKE91
+CHKE40 INC  R9
+       CI   R9,>0E08
+       JNE  CHKE10
+       LI   R0,>0E00
+       BLWP @VWTREA
+       RTWP
+

@@ -1,0 +1,97 @@
+*
+* in the VDP tables VDP R9 must come first for interlace masking
+* interlace flag stored in CONTROL . . 0=no interlace. <>0=interlace
+*
+VDP80  DATA >8900
+       DATA >888A
+       DATA >8004,>81F0,>8203,>8340
+       DATA >8406,>8508,>8601
+       DATA >8A00
+       DATA >0000
+
+VDP40  DATA >8900
+H81    EQU  $+2
+       DATA >8000,>81F0,>8200,>830E,>8406,>8600
+       DATA >8506,0
+
+VDP32  DATA >8900
+       DATA >8000,>81E0,>8200,>830E,>8406,>8600
+       DATA >8506,0
+
+       EVEN
+V40
+       CLR  R4                24 line mode
+       LI   R3,VDP40          mode data
+       JMP  VDPDO2
+
+V80
+       MOV  *R14+,R4          get 24/26 line mode flag. 0=24
+       LI   R3,VDP80
+       JMP  VDPDO2
+
+V32
+       CLR  R4                24 line mode
+       MOVB @UNICOL,R1        get the color
+       LI   R0,>E*>40         base of color table
+       BLWP @VSBW             first byte, set vdp write address
+       LI   R0,15             do next 15 bytes _fast_
+V32A   MOVB R1,@VDPWD         move next byte
+       DEC  R0
+       JNE  V32A
+
+       LI   R3,VDP32
+
+VDPDO2
+       MOV  *R3+,R1           get VDP r9 data
+       ABS  R4                24 rows?
+       JEQ  VDPDO4            yes
+       ORI  R1,>0080          set to 26.5 rows
+VDPDO4 MOV  @INTER,R0         interlace on?
+       JEQ  VDPDO3             no
+       ORI  R1,>0008          set interlace bit
+VDPDO3 SWPB R1                now do it
+       MOVB R1,@VDPWA
+       SWPB R1
+       MOVB R1,@VDPWA
+*
+       LI   R1,>0087
+       MOVB @UNICOL,R1        install colors . . . .
+       JMP  VDPP
+VDPDO
+       MOV  *R3+,R1
+       JEQ  VDPEX             done.
+       SWPB R1
+VDPP   MOVB R1,@VDPWA
+       SWPB R1
+       MOVB R1,@VDPWA
+       CB   R1,@H81
+       JNE  VDPDO
+       SWPB R1
+       MOVB R1,@>83D4         for the enjoyment of KSCAN
+       JMP  VDPDO             keep looping
+
+CHAR01
+       MOV  *R13,R6           get r0=address.
+
+       MOVB @>8000,R5
+       MOVB @CATPAG,@>8000    characters are in >3000 space of CATalog page
+       LI   R1,>1000
+       MOV  R6,R0
+       LI   R2,>400
+       BLWP @VMBW             put characters in vdp
+
+       A    R2,R0             r0 now points to second half of Charset
+       MOV  R1,R3             get start address of characters . .. .
+       MOVB *R3+,R1
+       INV  R1                negate it
+       BLWP @VSBW             write the byte to vdp. set vdp write add
+CHAR02 MOVB *R3+,R1           get next byte
+       INV  R1                invert it
+       MOVB R1,@VDPWD         move it to vdp
+       DEC  R2
+       JNE  CHAR02
+
+       MOVB R5,@>8000         PUT IT BACK
+
+VDPEX  RTWP                   return
+

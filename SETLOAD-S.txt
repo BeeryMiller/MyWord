@@ -1,0 +1,100 @@
+SETLT1 TEXT 'Complete Pathname of Current Loader:'  36 bytes
+SETLT2 TEXT '         Complete Path to load from:'  24 bytes
+SETLT3 TEXT 'Loading MY-Word Loader'  22 bytes
+SETLT4 TEXT 'Saving MY-Word Loader'   21 bytes
+SETLT5 TEXT 'Set Pathname' 12 bytes
+SETLDC TEXT '.'               required last character in load volume
+*
+SETPAB DATA >0500,>2000,0000,13*256,>0007
+       TEXT 'DSK1.MW'
+       BSS  34
+VOLBUF BSS  39                buffer for device name....
+       EVEN
+*
+SETLOD LI   R2,80*24          clear the screen
+       BL   @CLS
+       BLWP @MODE80           80 columns . . .24 lines
+       DATA 0
+*
+       BLWP @VMBWD            throw up a header
+       DATA 34,SETLT5,12
+*
+SETL15 BLWP @VMBWD
+       DATA 5*80+1,SETLT1,36
+       LI   R0,5*80+1+37
+       LI   R1,SETPAB+9       do filename within PAB
+       LI   R2,40
+       BLWP @INPUT
+       MOVB @SETPAB+9,R1      zero length?
+       JEQ  SETLEX            get out...
+*
+       BLWP @VMBWD
+       DATA 22*80+28,SETLT3,22  "loading..."
+*
+       BLWP @VMBWD
+       DATA >1F00,SETPAB,50
+       LI   R0,>1F00+9
+       MOV  R0,@>8356
+       BLWP @DSRLNK           load the file
+       DATA 8
+*
+       BLWP @VMBWD
+       DATA 22*80+28,DEFTXT,22               a bunch of spaces
+*
+       LI   R0,>1F01
+       BLWP @VSBR
+       SRL  R1,13
+       JNE  SETL15            load error...refetch filename
+*
+       LI   R0,>2000          where to start lookin'
+SETL19 BLWP @VSBR
+       INC  R0
+       SWPB R1
+       BLWP @VSBR
+       SWPB R1
+       CI   R1,':)'           look for flag word...
+       JEQ  SETL20
+       INC  R0
+       CI   R0,>2400          4 sectors is enough lookin'
+       JNE  SETL19
+       JMP  SETL15            bad file...
+SETL20 INC  R0                point to data to be patched
+       MOV  R0,@SETLPT         install the patch address....
+*
+SETL25 BLWP @VMBWD
+       DATA 8*80+1,SETLT2,36
+       LI   R0,8*80+1+36+1
+       LI   R1,VOLBUF
+       LI   R2,38
+       BLWP @INPUT
+*
+       MOVB @VOLBUF,R1        null?
+       JEQ  SETLEX             yip....get out
+*
+       SRL  R1,8
+       CB   @VOLBUF(R1),@SETLDC              ends with a decimal?
+       JNE  SETL25            no, so force them to reenter...
+*
+       MOVB R1,@VOLBUF+1(R1)  add a trailing null..
+*
+       BLWP @VMBWD
+SETLPT DATA >2000+4+6,VOLBUF+1,39            patch in new load path
+*
+       BLWP @VMBWD
+       DATA >1F00,SETPAB,50
+       LI   R1,>0600
+       LI   R0,>1F00
+       BLWP @VSBW             change op-code to save...
+*
+       BLWP @VMBWD
+       DATA 22*80+28,SETLT4,21  "saving..."
+*
+       LI   R0,>1F00+9
+       MOV  R0,@>8356
+       BLWP @DSRLNK           SAVE the file
+       DATA 8
+*
+SETLEX BLWP @MODE80
+       DATA 26
+       RTWP
+*

@@ -1,0 +1,269 @@
+       DEF  SFIRST,SLOAD
+       DEF  SLAST
+
+       REF  VDPWA,VDPWD,SCAN
+
+       AORG >2E00        PUT IT OUT OF THE WAY
+
+*      uses data buffer @ >e000 in file DODD
+PAB    EQU  40*26+10
+PABBUF EQU  >1000
+*
+VOLLEN EQU  >8080
+VOLUME EQU  >8082
+*
+SLOAD
+SFIRST LWPI WS
+       B    @BEGIN
+*
+       TEXT ':)'
+PATHNM TEXT 'DSK2.'
+       BYTE 0
+       TEXT '12345'
+       TEXT '1234567890'
+       TEXT '1234567890'
+       TEXT '1234567890'
+       EVEN
+*
+BEGIN  LI   R0,>07F4
+       BLWP @VWTR             pretty screen color
+*
+       LI   R0,46*8+>800
+       LI   R1,CHARS
+       LI   R2,100*8
+       BLWP @VMBW             put most of a character set in place
+*
+       B    @TITLE            TOSS UP THE DODD TITLE
+*      label that TITLE returns to is BEGIN1
+BEGIN1
+       LI   R0,>0E03
+       BLWP @VWTR
+*
+       CLR  R0
+       LI   R1,>6000
+       LI   R2,8192           save cart to VDP page 3
+       BLWP @VMBW
+       LI   R0,>0E00
+       BLWP @VWTR
+*
+       B    @TTLRT            and now do the loader
+*
+       COPY "FUTILS-S1"
+       COPY "DSRLINK"
+       COPY "DODD"       DODD CODE  version 2
+       EVEN
+
+PABDAT DATA >0500,PABBUF,0,>3000,6
+       TEXT 'EDITOR'
+H20    BYTE >20
+SAVEP  BYTE 0
+TC     TEXT 'C'
+PERIOD TEXT '.'
+       EVEN
+CATDAT DATA >0500,PABBUF,0,>1800,5
+       TEXT 'MYCAT'
+       EVEN
+FORDAT DATA >0500,PABBUF,0,>3000,6
+       TEXT 'FORMAT'
+       EVEN
+CHRDAT DATA >0500,PABBUF,0,>0800,6
+       TEXT 'CHARA1'
+       EVEN
+CNTDAT DATA >0500,PABBUF,0,>3000,7
+       TEXT 'CONTROL'
+       EVEN
+
+WS     BSS  32
+
+MAP4A  EQU  >8000
+MAP1   EQU  >8001        >2000
+MAP2   EQU  >8005        >A000
+MAP3   EQU  >8006        >C000
+
+*
+HELPPG BYTE >37
+EDITPG BYTE >3C,>3D
+FORMPG BYTE >3E,>3F
+CATPAG BYTE >2F
+UTILPG BYTE >2A,>2B,>03,>2C
+BUFFPG BYTE >28,>29,>2A,>2B,>2C,>2D,>2E
+       EVEN
+IMAGE
+       BSS  2
+LENGTH BSS  2
+WHERE  BSS  2
+
+* REAL MAIN ENTRY POINT AND RETURN FROM TITLE ROUTINE
+TTLRT  LWPI WS
+*
+       LI   R2,VOLUME         copy load pathname into place etc.
+       CLR  R3
+       LI   R4,PATHNM
+VOLNXT MOVB *R4+,*R2+
+       JEQ  VOLDON
+       INC  R3
+       JMP  VOLNXT
+VOLDON MOV  R3,@VOLLEN        store length
+*
+       LI   R12,>1EF8
+       SBO  0            8K CART SPACE
+       INCT R12
+       SBO  0            >6000 UNPROTECTED
+       INCT R12
+       SBO  0            >7000 UNPROTECTED
+
+       MOVB @MAP4A+1,@UTILPG  save utility pages
+       MOVB @MAP4A+5,@UTILPG+1
+       MOVB @MAP4A+6,@UTILPG+2
+       MOVB @MAP4A+7,@UTILPG+3
+
+       LI   R0,HELPPG         copy page list into un-used memory space
+       LI   R1,>804F
+TTLT1  MOVB *R0+,*R1+
+       CI   R0,BUFFPG
+       JNE  TTLT1
+
+* LOAD CATALOG
+       LI   R1,CATDAT
+       MOVB @CATPAG,@MAP2
+       BL   @GTFL
+       LI   R0,PAB+1
+       BLWP @VSBR             get error byte
+       SRL  R1,13
+       JEQ  GETCAT
+       BLWP @0                error. reset
+GETCAT LI   R0,PABBUF+6
+       LI   R1,>A000
+       LI   R2,>1FFF
+       BLWP @VMBR              READ IT INTO PAGE
+*
+* LOAD FORMATTER
+       MOVB @FORMPG,@MAP2
+       MOVB @FORMPG+1,@MAP3
+       LI   R1,FORDAT
+       BL   @GETFIL
+
+* PATCH THE ENTRY CODE THAT CHECKS MODULES ETC
+       MOV  @BRANCH,@>A010
+       MOV  @BRANCH+2,@>A012
+* NOW PATCH IN THE PRINTER NAME
+       LI   R0,>A916
+       LI   R1,PRINT
+FORM3  MOVB *R1+,*R0+
+       CI   R0,>A94C     DONE?
+       JNE  FORM3
+* PATCH DSRLNK TO RETURN TO US FUNNY TOO
+       MOV  @BR6,@>C80E       these patch out RTWP's out of DSRLNK
+       MOV  @BR6,@>C7FE
+* patch out the DP bug . . only took forever to find 8/7/87
+       LI   R0,>1000          nop
+       MOV  R0,@>C24E         lucky guess, i guess
+* patch out the other DP bug . ..  only took twice forever to find . . .
+*   moves text buffer for DP from E13C to >F200
+       LI   R0,>F200
+       MOV  R0,@>C3FC
+*
+* LOAD CHARA1 FILE
+       MOVB @CATPAG,@MAP2
+       LI   R1,CHRDAT
+       BL   @GTFL
+       LI   R0,PAB+1
+       BLWP @VSBR        GET ERROR BYTE
+       SRL  R1,13
+       JNE  GETEDT            IF ERROR . .DON'T BOTHER GETTING CHARS.
+       LI   R0,PABBUF+6
+       LI   R1,>B000
+       LI   R2,>0400
+       BLWP @VMBR              READ IT INTO PAGE
+
+GETEDT
+* LOAD EDITOR
+       MOVB @EDITPG,@MAP2
+       MOVB @EDITPG+1,@MAP3
+       LI   R1,PABDAT
+       BL   @GETFIL
+
+* LOAD CONTROL PROGRAM
+       LI   R1,CNTDAT
+       BL   @GETFIL
+       MOVB @MAP4A+3,@MAP4A+7 make sure memory buffer is in proper place...
+       B    @>6000            start it up
+
+PRINT  TEXT 'PIO.LF        '
+       TEXT '              '
+       TEXT '              '
+       TEXT '              '
+       EVEN
+
+CLOSE
+KEYCAT BYTE 1                 FCTN 7 TO ACTIVE CATALOG
+OPEN
+NULL
+H00    BYTE 0
+READ   BYTE 2
+WRITE  BYTE 3                 WRITE OP-CODE
+       EVEN
+
+BRANCH B    @>A040
+BR6    B    *R6               patch code
+
+       EVEN
+
+*********************
+
+* LOAD A PROGRAM IMAGE CORRECTLY
+
+GTFL
+       CLR  R5
+GETFIL
+       MOV  R1,R3             save pointer to file pab
+       LI   R0,PAB
+       LI   R2,9
+       BLWP @VMBW        MOVE PAB
+*
+       MOV  @VOLLEN,R2
+       LI   R0,PAB+10
+       LI   R1,VOLUME
+       BLWP @VMBW             move volume name
+       A    R2,R0             address to put filename at
+       MOV  R3,R1
+       AI   R1,9              file length in CPU
+       MOVB *R1+,R2           get length
+       SRL  R2,8
+       BLWP @VMBW
+       MOVB @9(R3),R1         get length of filename
+       AB   @VOLLEN+1,R1      add in volumename length
+       LI   R0,PAB+9
+       BLWP @VSBW             copy length to VDP
+*
+       LI   R0,PAB+9
+       MOV  R0,@>8356
+       BLWP @DSRLNK
+       DATA 8
+*
+       MOV  R5,R5
+       JEQ  GTFL1
+*
+       LI   R0,PAB+1
+       BLWP @VSBR        GET ERROR BYTE
+       SRL  R1,13             isolate error bits
+       JEQ  GETF1
+       BLWP @0           ERROR. RE-BOOT
+
+GETF1
+       LI   R0,PABBUF
+       LI   R1,IMAGE
+       LI   R2,6
+       BLWP @VMBR
+       MOV  @WHERE,R1
+       MOV  @LENGTH,R2
+       LI   R0,PABBUF+6
+       BLWP @VMBR        GET THE FILE
+GTFL1
+       SETO R5
+       RT
+
+       COPY "CHARS"
+
+SLAST  END
+

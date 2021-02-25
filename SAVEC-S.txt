@@ -1,0 +1,56 @@
+       DEF  SAVEC
+
+       REF  DSRLNK,VMBW,VMBR
+
+       AORG >3400        PUT IT OUT OF THE WAY
+
+PAB    EQU  >1000
+PABBUF EQU  >1040
+
+PABSAV DATA >0600,>1000,0,>1406,10
+       TEXT 'DSK2.MYCAT'
+*      TEXT 'DSK.MYWORK.MYCAT' 16
+       EVEN
+
+WS     BSS  32
+
+IMAGE
+       BSS  2
+LENGTH BSS  2
+WHERE  BSS  2
+
+HEADER
+       DATA 0,>1400,>2000
+
+SAVEC
+       LWPI WS
+
+       MOVB @>8005,R9
+       LI   R0,>20*256
+       MOVB R0,@>8000+5  MAP IN CATALOG CODE PAGE
+
+       LI   R0,>1006
+       LI   R1,>A000
+       LI   R2,>2000
+       BLWP @VMBW        MOVE PROGRAM TO VDP
+
+       LI   R0,>1000
+       LI   R1,HEADER
+       LI   R2,6
+       BLWP @VMBW        MOVE THE HEADER
+
+       LI   R0,>800
+       LI   R1,PABSAV
+       LI   R2,40
+       BLWP @VMBW
+
+       LI   R0,>809
+       MOV  R0,@>8356
+       BLWP @DSRLNK
+       DATA 8
+
+       MOVB R9,@>8005
+       BLWP @0
+
+       END
+

@@ -1,0 +1,188 @@
+* Dull, boring, ugly, uniteresting, title screen for MY-Word.
+*  Written by the very essence of boredom, Mike Dodd, who, instead of
+*  writing anything worthwhile for MYARC, spends his time writing
+*  deadly-dull title screens as a part of the evil Lord Jack Riley's
+*  sinister plot to wipe out all creativity in the world.
+*      DEF  MWT          Have to have some sort of name
+*      REF  VMBW,VSBW,VMBR
+VWA    EQU  >8C02        In 99/4A Mode
+VWD    EQU  >8C00
+VWRD   EQU  >8C06
+CHRBUF EQU  >E000
+*CHRBUF BSS  768          Space to stick characters I'm inverting
+       EVEN
+* Now for all sorts of dull, boring, character definitions
+CHARD  DATA >0000,>7C7C,>7C7C,>7070   128
+       DATA >0000,>FCFC,>FCFC,>0000   129
+       DATA >0000,>0080,>C0E0,>0000   130
+       DATA >7070,>7070,>7070,>7070   131
+       DATA >3010,>0C00,>0004,>0C1C   132
+       DATA >3C7C,>7C7C,>7870,>6040   133
+       DATA >0000,>FC7C,>FCFC,>F8F0   134
+       DATA >E0C0,>8000,>0000,>0000   135
+       DATA >0000,>E0C0,>8000,>0000   136
+       DATA >FCFC,>FCFC,>0000,>0000   137
+       DATA >0000,>0000,>0000,>00FC   138
+       DATA >8080,>8080,>8080,>8080   139
+       DATA >0000,>0000,>0000,>0080   140
+       DATA >8080,>8080,>8080,>80FC   141
+* MYARC LOGO IS LAID OUT LIKE THIS:
+*
+* 128 129 129 129 129 129 130
+* 131   M   Y   A   R   C
+* 132 134 136
+* 133 135
+
+* Here comes the deadly dull screen data (yawn):
+* The format for this boring data table is as follows:
+* BYTE MSBy screen addr,LSBy screen addr,# bytes,data
+* If it hits a byte >FF, it changes the character offset from 00 to 80,
+*  or 80 to 00. Used for inverting characters.
+* If hits an >FF,>FF, it stops
+*  First, draw MYARC logo
+SCRND  BYTE >00,>D8
+       BYTE 7,128,129,129,129,129,129,130
+       BYTE >01,>00
+       BYTE 6,131,'M','Y','A','R','C'
+       BYTE >01,>28
+       BYTE 3,132,134,136
+       BYTE >01,>50
+       BYTE 2,133,135
+* Now for some real, honest text:
+       BYTE >01,>F0,7
+       TEXT 'MY-Word'
+       BYTE >02,>41,5
+       TEXT 'V1.22'      Try to guess!       UPDATE
+       BYTE >03,>5F,1,>8C     1 dot over the "G" (loadinG) for pixel col after
+       BYTE >03,>89,1,>8C     1 dot over the "T" (waiT) for pixel col after
+       BYTE >FF          Start writing typical, dull, inverse characters
+       BYTE >03,>80,8
+       TEXT 'Loading'
+       BYTE 141-128      Very thin vertical line&botoom line - offset
+       BYTE >03,>A6,12
+       TEXT 'Please Wait'
+       BYTE 139-128      Very thin vertial line - offset
+       BYTE >FF,>FF      All done. Let's stop this garbage
+       EVEN
+TITLE
+*      MOV  R11,@TITRT        jph lives
+       LIMI 0
+*MWT    LIMI 0            Kill interrupts so VDP doesn't get screwed. On
+*                        second though, if the screen was really messed
+*                        up, maybe it would be more interesting. Hmmmm.
+       LI   R0,>900      Point to where I sincerly hope char data is.
+       LI   R1,CHRBUF    CPU buffer
+       LI   R2,768       A lot
+       BLWP @VMBR        Read it
+INV    INV  *R1+         Invert the stupid thing
+       DECT R2           Are we done????
+       JNE  INV          NO (groan. 766 to go - or less)
+       LI   R0,>D00      Starting with char 160 (128 + 32)
+       LI   R1,CHRBUF    Start of inverted char set
+       LI   R2,768       A whole lot
+       BLWP @VMBW        Write it
+       BL   @VRSET       Set two incredible VDP registers
+       BYTE 0,2,>00,>50  Text, and hope like crazy that rest is set up.
+       BL   @VRSET       Wait... is the boring MDD going to write another?
+       BYTE 7,1,>F4      Yes... ONE INCREDIBLE REGISTER!!! The colors!!
+       BL   @VFILL       Lets fill
+       DATA 0,>2000,960  Next time I'll try >2A (*), just to be different
+*                        P.S. - >2A looked ugly
+       LI   R0,>C00      Char 128. Force of habit
+       LI   R1,CHARD     Point to boring character data
+*                        (interesting char data not present in this version)
+       LI   R2,112       Not a lot
+       BLWP @VMBW        Write (Writing is more fun than reading, anyway)
+       BL   @VFILL       Lets fill the sucker again
+       DATA 40,>8900,40  R1 C0 - thick line all the way across
+       BL   @VFILL       Not again!?!?
+       DATA 800,>8A00,40 R20 C0 - thin line across
+       BL   @VFILL       What, another fill??
+       DATA 856,>8A00,7  Yes, afraid so - a VERY thin line (VTL) over LOADING
+       BL   @VFILL       I can't be serious - ANOTHER FILL?????!!!!!????
+       DATA 894,>8A00,11 I'm deadly serioud - a VTL over PLEASE WAIT
+       LI   R1,>8C00     Yeeaaahhh.. we're done filling!!!!!!
+       LI   R9,SCRND     Point to start of screen data. Better than char data!
+       SETO R10          End flag
+       CLR  R8           Offset = >00
+MWT1   CB   *R9,R10      A special flag?
+       JEQ  MWT3         Yes (in a reverent tone of voice)
+       MOVB @1(R9),@VWA  No (in a degrading tone of voice)
+       MOVB *R9+,R0      Get MSBy of address
+       ORI  R0,>4000     I'm writing (I LOVE to write!!)
+       MOVB R0,@VWA      Write to VDP chip
+       INC  R9           Get over LSBy
+       MOVB *R9+,R0      Get length
+       SRL  R0,8         shift down
+MWT2   MOVB *R9+,R1      Get char
+       AB   R8,R1        Add offset
+       MOVB R1,@VWD      Write to VDP (don't you just LOVE all these writes!)
+       DEC  R0           Done? (enough questions - let's have some statements!)
+       JNE  MWT2         No (now THAT'S a statement, not a wimpy question!!)
+       JMP  MWT1         Get next data block
+* The following section handles special flags. It is only to be talked about
+* in a reverent, worshipful, tone of voice. Hint: take tone of voice you use
+* to talk about Jack Riley. That is a perfect example of the tone NOT to use
+* in reference to this section. (Wasn't that helpful?)
+* The reason for the holiness of this area is that this is the area that Lord
+* Riley wanted put in. Since His Lordship is such an important person, it only
+* follows that it should be mentioned in a reverent tone.
+* (What we have here is your basic contradiction in terms - Riley and Important)
+
+MWT3   CB   @1(R9),R10   Is it (remeber... reverence is the key) the end flag?
+       JEQ  MWT4         Yes, your worship, it is (Now THAT's more like it!)
+       AI   R8,>8000     Change offset
+       INC  R9           Point to next data cluster
+       JMP  MWT1         Get another block
+*MWT4   LIMI 2            Let C/A/D work
+*      JMP  $            Complete lock up!!!!!!!!
+MWT4   B    @BEGIN1
+*TITRT  EQU  $-2
+*
+* What follows are general-purpose routines. You do not have to reference them
+* in a worshipful voice.
+VRSET  MOVB *R11+,@VWA
+       LI   R0,>9100
+       MOVB R0,@VWA
+       MOVB *R11+,R0
+       SRL  R0,8
+VRSET1 MOVB *R11+,@VWRD
+       DEC  R0
+       JNE  VRSET1
+       INC  R11
+       ANDI R11,>FFFE
+       RT
+SVDPWA LI   R2,>4000
+       JMP  SVDPXA
+SVDPRA CLR  R2
+SVDPXA MOV  *R11+,R1
+       MOVB R1,R0
+       SRL  R0,6
+       MOVB R0,@VWA
+       LI   R0,>8E00
+       MOVB R0,@VWA
+       ANDI R1,>3FFF
+       SWPB R1
+       MOVB R1,@VWA
+       SWPB R1
+       SOCB R2,R1
+       MOVB R1,@VWA
+       RT
+VFILL  MOV  *R11+,@VFILL1
+       MOV  R11,@VFILL2
+       BL   @SVDPWA
+VFILL1 DATA >0000
+VFILL2 EQU  $+2
+       LI   R11,>0000
+       MOV  *R11+,R0
+       MOV  *R11+,R1
+VFILL3 MOVB R0,@VWD
+       DEC  R1
+       JNE  VFILL3
+       MOVB R1,@VWA
+       LI   R0,>0E00
+       MOVB R0,@VWA
+       RT
+* Finally! An end to this stupid program!!!
+*      END  MWT
+

@@ -1,0 +1,47 @@
+SCRLL  DATA SCRLWS,VF03
+SCRLWS BSS  32
+*CRBUF BSS  80                scroll buffer
+*SCRBUF EQU  TXTBUF       crossing fingers...
+SCRBUF EQU  >8100        crossing fingers...
+VF03
+* new improved screen scroll . . leaves >6000 space alone
+
+       LI   R5,3*80
+       LI   R2,80             line length
+*
+SCRL05 MOV  R5,R0
+       LI   R1,SCRBUF
+       BLWP @VMBR             read in a line
+       AI   R0,-80
+       BLWP @VMBW             write out the line
+*
+       A    R2,R5             increment screen line
+       CI   R5,24*80          bottom of screen?
+       JNE  SCRL05             nope
+*
+       LI   R0,23*80
+       LI   R1,'  '
+SCH20  EQU  $-2
+       LI   R2,80
+       BLWP @VSBW        SET VDP ADDRESS
+*
+VF05   MOVB R1,@VDPWD    PUT NEXT BYTE OUT
+       DEC  R2
+       JNE  VF05
+*
+       BLWP @KSCAN
+       MOVB @>837C,R0
+       JEQ  VF06              not a new key, continue on....
+       CB   @>8375,@SCH20     space bar?
+       JNE  VF06              nope. pass that key back along
+*
+* NOW WAIT FOR _ANY_ KEY PRESS
+VF09   BLWP @KSCAN
+       MOVB @>837C,R0         no key?
+       JEQ  VF09              wait some more
+*
+VF06   MOVB @>8375,R0         get last key press
+VF09B  SRL  R0,8              make it a word . .
+       MOV  R0,*R13
+       RTWP                       RETURN TO CALLER
+*

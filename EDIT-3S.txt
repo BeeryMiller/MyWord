@@ -1,0 +1,595 @@
+SRCEND EQU  9
+DESPTR EQU  14
+DESEND EQU  10
+ROOM   EQU  15
+REFRMT EQU  $
+       ABS  @WDWRAP
+       JNE  REFR05
+       RT                     Ignore if not in wordwrap mode
+REFR05 MOV  R11,@LEVEL1
+       BL   @UPDATE
+       MOV  CLINE,@RLINE
+       CLR  @RSTRNG
+       BL   @GETDAT
+       JMP  REFXIT
+RENTRY CLR  @GOLF             Clear go left flag
+       CLR  @MFLAG
+       CLR  @CRFLAG           Get out of insert mode.
+       MOV  SRCEND,R12
+       BL   @RESTAB           Restore margins
+       BL   @SAVEWS           Save current screen pointers
+       MOV  R12,SRCEND
+       MOV  CLINE,@WLINE      First line to write.
+       INC  CLINE
+       MOV  CLINE,@RLINE      Next line to read
+       MOV  CURSOR,R8         Displacement for insert mode.
+       ABS  @SWSF             Insert mode or replace string?
+       JNE  REFR10            Yes, ref from current cursor
+       MOV  @SIX,CURSOR       No, reformat entire line.
+       MOV  @INDT,R8          Set up for top of paragraph.
+       ABS  @TOPPAR           Top of paragraph?
+       JNE  REFR20            Yes
+       MOV  @LMRG,R8          No, adjust margin.
+       JMP  REFR20
+*      CASE WHERE YOU REFORMAT FROM CURRENT CURSOR POSITION
+REFR10 MOV  @TPM6A,@BUFADR    Get line into Temp Buffer
+       MOV  @WLINE,@LINENO
+       BL   @GETL20
+       JMP  REFXIT            Error
+       LI   DESPTR,TEMPM6     Clear to end of line (past cursor)
+TPM6A  EQU  $-2
+       MOV  DESPTR,@DESSAV
+       A    @LMRG,@DESSAV
+       A    R8,DESPTR         (R8=CURSOR)
+       LI   R6,86
+       S    R8,R6             (R6=COUNT)
+       BL   @CLRT10
+*      MOV  @RSTRNG,R6        Check for leading blank in replace
+*      JEQ  REFR20            Not replace.
+*      CB   *R6,@BLANK        Yes, ist it a blank?
+*      JNE  REFR20            No
+*      INC  CURSOR            Yes, skip it.
+*      TEMP BUFFER HAS BEEN SET UP.
+REFR20 MOV  CURSOR,CURADR
+       AI   CURADR,REPBM6     Curadr -> Source pointer
+       LI   DESPTR,TEMPM6     Desptr -> Destination pointer
+       MOV  DESPTR,DESEND     Desend -> End of Destination record
+       A    @RMRG,DESEND
+       A    R8,DESPTR
+       CLR  @SWSF
+       DEC  DESPTR
+*      GET NEXT WORD
+GETNWD EQU  $                 Get next word
+       CLR  R0
+       MOV  CURADR,R13        CURADR -> Past end of last word
+GETN10 BL   @UPDCSR           Check for update cursor
+       C    R13,SRCEND        End of record?
+       JL   GETN20            No
+       BL   @GETDAT           Yes, get new data
+       JMP  GETN35            No more data, end of file
+GETN20 CB   *R13+,@BLANK      Scan for non blank character
+       JEQ  GETN10
+       DEC  R13               Make CURADR -> start of next word
+       MOV  R13,CURADR
+       CB   *R13,@EOT
+       JNE  GETN40
+       INC  DESPTR
+GETN30 MOVB *R13,*DESPTR      put eot in new record.
+       JMP  PUTN10
+GETN35 LI   R13,EOT
+       JMP  PUTN10
+
+REFR50 EQU  $
+       BL   @RESTWS
+       BL   @BUMPC
+       MOV  @RLINE,R6         Delete excess lines.
+       S    @WLINE,R6
+       MOV  @WLINE,@RLINE     Put cursor back where it was
+       BL   @DLIN05           We won't delete current line, so ok
+REFXIT MOV  @LEVEL1,R11
+       RT
+
+GETN40 BL   @UPDCSR
+       C    R13,SRCEND
+       JHE  GETN45                                                      10-1 JJ
+       CB   *R13,@BLANK       Scan for end of word
+       JEQ  GETN50            Found it
+       CB   *R13+,@EOT        Check for end of text marker
+       JNE  GETN40            Found it
+       JMP  GETN50                                                      10-1 JJ
+GETN45 CB   *R13,@BLANK       LAST CHARACTER A BLANK?                   10-4 JJ
+       JEQ  GETN50            YES                                       10-4 JJ
+       INC  R13               NO, INC R13 BEFORE CALC ROOM              10-4 JJ
+GETN50 MOV  R13,ROOM
+       S    CURADR,ROOM
+
+PUTNWD MOV  DESEND,R12        Put next word in temp buffer
+       S    DESPTR,R12        R12 = Room left
+       C    ROOM,R12          Room for next word?
+       JLT  PUTN20            Yes
+       C    DESPTR,@DESSAV    Special case of first long word.
+       JEQ  PUTN20
+PUTN10 EQU  $                 Out of room so:
+       MOV  @WLINE,@LINENO    Insert this line
+       BL   @INSL10
+       INC  @RLINE            Insert caused the line# to
+       INC  @WLINE            be shift up by 1.
+       BL   @CLRTMP           Clear temp buffer
+       LI   DESPTR,TEMPM6     left margin
+       MOV  DESPTR,DESEND     DESPTR = addr of left margin
+       A    @LMRG,DESPTR
+       DEC  DESPTR            Allow for the blank bump
+       MOV  DESPTR,@DESSAV
+       A    @RMRG,DESEND      DESEND = addr of right margin
+       CB   *R13,@EOT         End of text?
+       JEQ  REFR50            Yes
+PUTN20 EQU  $
+       INC  DESPTR            Allow 1 blank between words
+PUTN30 MOVB *CURADR+,*DESPTR+ Move word to temp buffer
+       DEC  ROOM
+       JGT  PUTN30
+       ABS  @MFLAG
+       JEQ  PUTN35
+       MOV  @WLINE,@SREGS     Hit marker, save cline
+       MOV  @WLINE,@SREGS+4   Make sbias=cline
+       MOV  CURADR,R6
+       S    @MARKER,R6        count # past marker.
+       MOV  DESPTR,CURSOR     Calculate new cursor
+       S    @TPM6A,CURSOR     Save new cursor.
+       S    R6,CURSOR         (R6 < ROOM ALWAYS!!!!)
+       MOV  CURSOR,@SREGS+2
+       CLR  @MFLAG
+PUTN35
+       MOV  CURADR,R13
+       DEC  R13
+       CB   *R13,@PERIOD
+       JNE  PUTN33
+       CB   @2(R13),@BLANK
+       JNE  PUTN33
+       INC  DESPTR
+PUTN33 EQU  $                 Bump CURADR to end of word
+       CB   *R13,@EOT         End of text marker?
+       JEQ  PUTN10            Yes, update line, exit
+       JMP  GETNWD            No, get next word.
+
+UPDCSR C    R13,@MARKER       Update cursor for replace string.
+       JNE  UPDC10            Not at marker
+       SETO @MFLAG
+UPDC10 RT
+
+GETDAT MOV  @RPM6A,@BUFADR    Gets next read line into buffer.
+       MOV  @RADR,CURADR      Updates pointers
+       MOV  CURADR,SRCEND
+       CLR  @MARKER
+       MOV  CURADR,R13
+       AI   SRCEND,79+6390    add in Jack's checksum..
+       S    @JRCHCK,SRCEND    and remove it here....
+       MOV  @RLINE,@LINENO
+       BLWP @GETLN
+       MOV  R0,R0             End of file?
+       JNE  GETD10            Yes
+       INC  @RLINE            No, count this line
+       INCT R11
+GETD10 RT
+
+       PAGE
+*-------------------------------------------------------------------------
+*      "CURSOR FLASH ROUTINE"
+*-------------------------------------------------------------------------
+FLACSR EQU  $
+
+       LWPI TEMPWS
+
+       ABS  @TABSTA
+       JNE  FLAC02            no show tabs.
+
+       LI   R0,24*80          line 25
+       MOV  @WPTR*2+SCNWS,R2  offset due to numbers (maybe)
+       S    *R2,R0            window offset
+       A    @CURSOR*2+SCNWS,R0               put in cursor position offset
+       BLWP @VSBREA           get character
+       AI   R1,>8000          set hi bit
+       BLWP @VSBWEA           show inverted character
+
+FLAC02
+       ABS  @HILGT            hi lighting?
+       JEQ  FLAC03            nope.
+
+       LI   R0,2*80           line 3
+       MOV  @WPTR*2+SCNWS,R2
+       S    *R2,R0            window offset
+       A    @CURSOR*2+SCNWS,R0
+       MOV  @STRL,R2          get byte count
+       JNE  FLAC04             more than 0
+       INC  R2                 if zero use 1
+FLAC04 BLWP @VSBREA           get byte
+       ORI  R1,>8000          set invert
+       BLWP @VSBWEA           put back byte
+       INC  R0                next character
+       CI   R0,3*80           are we at the start of the first line?
+       JEQ  FLAC03            yes . . then stop with the inverse . .
+       DEC  R2                down count
+       JNE  FLAC04            do next character
+*
+FLAC03 LWPI SCNWS        BRING BACK THE REGULAR REGS
+
+       MOV  R11,R15
+       MOVB @KEYCOD,@LSTKEY                                             7-21
+       MOVB CHAR,*CURADR
+       SETO @REFRSH           Disable refresh of cpu buffer
+       MOVB CHAR,R0           Set up cursor flash in R0
+       ABS  @HILGT            hi-lighting enables?
+       JEQ  FLAC05            nope.
+       SWPB R0
+       MOVB CHAR,R0           get the character again
+       ORI  R0,>8080          set high bit on character both times . . .
+       JMP  FLAC06
+FLAC05
+       SWPB R0
+       MOVB @CSR,R0
+FLAC06 MOV  CLINE,R8          Calculate VDP address of cursor
+       S    SBIAS,R8
+       LI   R12,80
+       MPY  R12,R8
+       A    CURSOR,R9         (Cursor column)
+       S    *WPTR,R9          Adjust for current window
+CLRFLA CLR  @FLASH            Clear a ctr for cursor flash
+CLRTIM MOVB @FLASH,@TIMER     Clear the timer
+CHKTIM CB   @TIMER,@B06       Has timer reached 1/10th sec.?
+       JL   SCANIT            No, so go scan keyboard
+       INC  @DELAY            Inc DELAY ctr every 1/10th sec
+       INC  @FLASH            Inc FLASH ctr every 1/10th sec
+       C    @FLASH,@D0003     Is it time to flash cursor?
+       JL   CLRTIM            No, so clear the timer
+*      "FLASH CURSOR!"        Flash cursor every 3/10ths sec
+       BLWP @SHOWTM
+       BL   @VADW             R9 = cursor vdp address
+       MOVB R0,@VDPWD
+       SWPB R0
+       JMP  CLRFLA            Go clear flash counter
+SCANIT LWPI >83E0
+       LIMI 2                 Give the timer a chance to inc
+       LIMI 0                 That's enough chance
+       BL   @>E               Go scan keyboard
+       LWPI SCNWS             Restore proper workspace ptr
+       MOVB @STATUS,R10       Is this a new key?
+       JNE  NEWKEY            Yes, go process it
+       CB   @KEYCOD,@BFF      Is any key down?
+       JEQ  CHKTIM            No, so loop
+CHKDEL C    @DELAY,@D000A     Has delay reached 1 second?
+       JL   CHKTIM            No, so loop
+       CLR  @DELAY
+       INCT @DELAY
+       MOV  @D0009,@DELAY     Yes, set delay to 9/10ths sec
+       JMP  PRCKEY            Go process key
+NEWKEY CLR  @DELAY            Clear the 1 sec delay counter
+PRCKEY
+*      LI   R0,>A00
+*KEYDLA DEC  R0                Wait to prevent key bounce.
+*      JNE  KEYDLA
+       CLR  R10               R10 = Key
+* SEE IF WE HAVE A NEED TO RING THE BELL.
+       C    CURSOR,@BELL
+       JNE  PGMM1             not on the bell location
+       MOVB @>8006,R0         save this page
+       LI   R10,>0300
+       MOVB R10,@>8006        install GROM/Sound page . . .
+       LI   R10,>8E0F         THIS SOUND NEEDS SERIOUS WORK . ..
+       MOVB R10,@>8400          HORRIBLY INEFFICIENT.
+       SWPB R10
+       MOVB R10,@>8400
+       LI   R10,>9100
+       MOVB R10,@>8400        up the volume on the sound a bit
+       LI   R10,>2000         a bit of a delay
+PGMM2  DEC  R10
+       JNE  PGMM2
+       LI   R10,>9F00
+       MOVB R10,@>8400
+       MOVB R0,@>8006         put back program page
+
+* SEE IF IN PROGRAM MODE AND IF WE ARE IN CASE MODE
+PGMM1
+*      MOV  CURSOR,@BELLSV    save the current cursor position
+
+       ABS  @PGMEDT      ? IN PROGRAM MODE
+       JEQ  PGMM0        NOPE.
+       C    CURSOR,@CASCHG    DO WE NEED TO CHANGE CASE?
+       JGT  PGMM0             NOPE.
+       MOV  @LINADR,R10
+       CB   @6(R10),@ASTER    is this line a comment?
+       JEQ  PGMM0             yes . . .
+       BL   @CNVLC            CONVERT IT
+PGMM0
+       ABS  @UPCASE
+       JEQ  FLSXIT
+       BL   @CNVLC
+FLSXIT CLR  R10               fouled this above. fix it here
+       B    *R15
+       PAGE
+*-------------------------------------------------------------------------
+*      Auto insert routine used by wordwrap
+*-------------------------------------------------------------------------
+AUTOIN EQU  $
+       MOV  R11,@LEVEL1       Save return address
+       MOV  @CMDRT,R11        Illegal in command mode
+       JNE  AUTXIT
+       SETO @CRFLAG           Turn flag on
+       CLR  @TOPPAR           No longer at top of paragraph
+       MOV  CURADR,R8         Was
+       CB   @KEYCOD,@BLANK
+       JEQ  AUTO15
+       CLR  R6                Word wrap length
+       DEC  R8                Don't count this character.
+       MOV  @RMRG,R14
+       S    @LMRG,R14
+AUTO05 CB   *R8,@BLANK        Find last blank
+       JEQ  AUTO20            Found it
+       INC  R6                Count character
+       C    R6,R14            Out of Range?
+       JHE  AUTO15            Yes, don't wrap
+       DEC  R8                Back up to next char
+       JMP  AUTO05            Look for next blank
+AUTO15 CLR  CURSOR            Can't wrap word, home cursor
+       MOVB CHAR,*CURADR                                                8-24
+       BL   @UPDATE           Update this line
+       BL   @INSL50           Insert blank line below
+       BL   @SCROLL
+       JMP  AUTXIT
+AUTO20
+       LI   R9,TEMPM6
+       A    @LMRG,R9          Adjust wrap for left margin
+       INC  R8                Skip blank
+       MOV  R8,R11            R8=Addr of word to wrap
+       MOV  R6,R10            R6=Length of word to wrap
+       JEQ  AUTO35
+AUTO30 MOVB *R8+,*R9+         Wrap word to next line
+       DEC  R6
+       JGT  AUTO30
+AUTO35 MOVB CHAR,*R9          Output this character
+       INC  R10                                                         8/30/82
+AUTO40 MOVB @BLANK,*R11+      R11=Addr of wrapped word
+       DEC  R10               Blank out rest of current line
+       JGT  AUTO40
+       S    @TADR,R9          Calculate new cursor position
+SIX    EQU  $+2
+       AI   R9,6              Allow for line numbers
+       MOV  R9,CURSOR
+       BL   @BUMPC            Bump cursor
+AUTO50 SETO @NCHAR            Enter routine comes here
+       BL   @UPDATE
+AUTO60 INC  CLINE
+       BL   @INSLIN           Insert line (Tempbf)
+       MOV  @LINADR,CURADR
+       A    CURSOR,CURADR
+       AI   CURADR,86         Adjust curadr.
+       BL   @SCRL03           Adjust screen pointers
+AUTXIT MOV  @LEVEL1,R11        Exit
+       RT
+       PAGE
+*-------------------------------------------------------------------------
+*  ROUTINES TO HANDLE CURSOR
+*-------------------------------------------------------------------------
+LFTAR
+       DEC  CURSOR            Back up
+       C    CURSOR,@LMRG      --
+       JHE  LFTEX             --
+       B    @TAB20            --
+LFTEX  RT
+RGTAR
+CSRRGT
+       INC  CURSOR            Go forward
+       C    CURSOR,@RMRG      --
+       JLE  LFTEX             --
+       B    @TAB15            --
+       RT
+*-------------------------------------------------------------------------
+BUMPC  EQU  $                 Finds window for current cursor
+       ABS  @GOLF             Go left flag?
+       JEQ  BUMP00            No
+       MOV  @FORMAT,R8        Yes, is cursor beyond left margin?
+       C    CURSOR,*R8
+       JLT  BUMP00            No, not yet
+       JEQ  BUMP00            No, not yet
+       CLR  @GOLF             Yes, restore left margin
+       MOV  *R8,@LMRG
+BUMP00 C    CURSOR,@LMRG
+       JLT  BUMP07
+       C    CURSOR,@RMRG
+       JGT  BUMP09
+BUMP05 C    CURSOR,*WPTR      Cursor on this screen?
+       JLT  BUMP01            No
+       C    CURSOR,@2(WPTR)   Maybe, check end of screen
+       JLE  BUMP10            Yes
+BUMP01 LI   WPTR,WTOP         Cursor not on screen, start
+BUMP06 C    CURSOR,@2(WPTR)   Cursor on this screen?
+       JLE  BUMP10            Maybe
+       C    *WPTR+,*WPTR+     add 4 to pointer
+       MOV  *WPTR,*WPTR
+       JLT  BUMP01            keep checking
+       JMP  BUMP06
+BUMP07 MOV  @LMRG,CURSOR
+       JMP  BUMP05
+BUMP09 MOV  @RMRG,CURSOR
+       JMP  BUMP05
+BUMP10
+       MOV  CURSOR,CURADR     Calculate cursor address
+       A    @LINADR,CURADR
+       RT                     Exit
+*-------------------------------------------------------------------------
+WINDOW
+       LI   WPTR,WTOP         Top of window table
+       LI   R8,WLIN           Line number mode table
+       ABS  @LINF             Line number mode?
+       JNE  WIND10            Yes
+       LI   R8,WNLIN          No, change table
+WIND10 LI   R9,3              3 table entries, each 4 bytes
+WIND20 MOVB *R8+,@1(WPTR)     Put column # in right byte
+       MOV  *WPTR,@2(WPTR)    Put column # in column end
+       INCT WPTR
+       A    @SWIDTH,*WPTR+    Adjust for end of window
+       DEC  R9
+       JGT  WIND20
+       SETO *WPTR             Set end of table flag
+       LI   WPTR,WTOP
+       RT
+*-------------------------------------------------------------------------
+* SUBROUTINES
+*-------------------------------------------------------------------------
+HOMCSR EQU  $                 Puts cursor in upper left corner
+       CLR  @CRFLAG
+       CLR  @TOPPAR
+       BL   @UPDATE
+       MOV  SBIAS,CLINE       Of screen.
+       CLR  CURSOR
+       B    @START
+
+VADW   ORI  R9,>4000          Write vdp address for write
+VAD    SWPB R9                Write vdp address for read
+       MOVB R9,@VDPWA
+       SWPB R9
+       MOVB R9,@VDPWA
+       JMP  SRT
+
+VMBW   MOV  R11,R14           Vdp multi byte write
+       BL   @VADW             R9 = vdp address
+       MOVB *R8+,R9           First byte of date = length
+       SRL  R9,8
+VMBW10 MOVB *R8+,@VDPWD       Write date using length byte
+       DEC  R9
+       JGT  VMBW10
+       B    *R14              Return
+
+SAVEWS EQU  $                 Saves pointers in R1-R7
+       LI   R9,SCNWS+2
+       LI   R8,SREGS
+SAVE10 LI   R6,7
+SAVE20 MOV  *R9+,*R8+
+       DEC  R6
+       JGT  SAVE20
+SRT    RT
+
+RESTWS
+REST10 LI   R9,SREGS
+       LI   R8,SCNWS+2
+       JMP  SAVE10
+       PAGE
+*-------------------------------------------------------------------------
+*      Set up command mode
+*-------------------------------------------------------------------------
+COMAND
+       CLR  @TOPPAR
+       MOV  @CMDRT,R0         Already in command mode?
+       JNE  COMA30            Yes
+COMA05 BL   @MOVE             Down load new key table!
+       DATA COMTBL
+       DATA CTBL              JPH patch to kill VDP tables
+       DATA COMTL
+       BL   @UPDATE           No, update line, etc.
+       BL   @SAVEWS           Save old pointers away
+COMA10 MOV  @SIX,@LMRG        Display mode message                      7-21
+       MOV  @D85,@RMRG                                                  7-21
+       S    @SIX,@RMRG        jph
+       S    @SIX,@RMRG        jph make sure screen line isn't fouled
+       BL   @DISPLY                                                     7-21
+       DATA COMSTA            and set up command return
+       DATA MODE              address
+       MOV  SBIAS,CLINE       Make cursor move to second line
+       INC  CLINE
+       CLR  @GOLF
+       SETO @UPCASE
+       LI   WPTR,WTOP         First window
+       LI   R8,WLIN
+       BL   @WIND10
+GETKEY CLR  CURSOR
+COMA20 CLR  @REFRSH
+       SETO @NCHAR
+       B    @START
+COMA30 BL   @CLRCMD
+       JMP  COMA10
+*-------------------------------------------------------------------------
+*      Decode command and start the process
+*-------------------------------------------------------------------------
+COMSTA EQU  $
+      CLR  @LINTBL+4         Remove error message.
+*      LI   R8,CTEXT                                                    10-15 JJ
+       BL   @SKIPBK
+       CI   R8,CTXTND-1       at the end of the line?
+CTXEND EQU  $-2               end of line pointer
+       JNE  COMS05            nope
+       B    @CMDXIT           return to edit mode . . . .
+COMS05 MOV  R8,R10
+       LI   R8,CMDTBL
+       MOV  R10,R0            pass pointer to command....
+       BLWP @CHKEXT           check if this is an external command....
+COMS10 MOV  R10,R9
+COMS20 CI   R8,CMDTND         End of table?
+       JHE  ERRMSG            Yes, command illegal
+       CB   *R9+,*R8          No, first char = command?
+       JNE  COMS30            No
+       INC  R8                Yes, is second char = command?
+       CB   *R9,*R8+
+       JEQ  COMS40            Yes, found a match
+       DECT R8                No, go to next command
+COMS30 AI   R8,CMDTE
+       JMP  COMS10
+
+COMS40 EQU  $                 Found command, R8 -> next data
+       MOV  *R8+,@MESG        Address of screen message
+       JEQ  COMS50            If 0, special, go to processor
+       MOV  *R8+,@ADDR        Otherwise set up return address
+       BL   @DISPLY           Do it.
+ADDR   DATA 0
+MESG   DATA 0
+       JMP  GETKEY            Get input for command
+
+COMS50 MOV  *R8,R8
+       B    *R8               Go to command processor
+
+ERRMSG EQU  $
+       BL   @CLRCMD
+ERRM10 BL   @BLOOP
+       CLR  @OVRL
+       JMP  COMA10
+*                             Make error sound.
+BLOOP  LI   R8,>8400
+       LI   R9,SOUND
+       MOVB *R9+,*R8
+*      NOP
+       MOVB *R9+,*R8
+*      NOP
+       MOVB *R9+,*R8
+       LI   R6,>1000
+BLP10  DEC  R6
+       JGT  BLP10
+       MOVB *R9,*R8
+       RT
+DSRERR EQU  $                 Error routine for text buffer full        8-24
+       MOV  @CMDRT,R0         Text Buffer Full                          8-24
+       JEQ  DSRE10
+       BL   @RESTWS           Command mode already,                     8-24
+       ABS  @OVRL             Maybe had a file open?                    8-24
+       JEQ  DSRE10            No                                        8-24
+       BL   @CLOSE            Yes                                       8-24
+       NOP                                                              8-24
+DSRE10 BL   @CLRCMD           Set up for re-entry.                      8-24
+       LI   R10,MEMERR                                                  7-21
+       MOV  R10,@ERRLIN                                                 7-21
+       BL   @DISPLY                                                     7-21
+       DATA COMSTA                                                      7-21
+       DATA MODF                                                        7-21
+       CLR  @NCHAR            make sure we donot update
+       B    @COMA05
+       PAGE
+*-------------------------------------------------------------------------
+*      EDIT CMDXIT COMMAND MODE
+*-------------------------------------------------------------------------
+CMDXIT BL   @REST10
+       C    CLINE,@EOF
+       JLT  CMDX10
+       MOV  @EOF,CLINE                                                  7-21
+       JEQ  CMDX05            In case we deleted all the lines.
+       DEC  CLINE
+CMDX05 MOV  CLINE,SBIAS
+CMDX10 MOV  @SSNLEN,@SCNLEN
+       MOV  @CPUADR,@TOPSCN
+       BL   @RESTAB

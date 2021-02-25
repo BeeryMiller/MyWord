@@ -1,0 +1,598 @@
+       DEF  SFIRST,SLOAD
+*
+       DEF  JPHEND
+*
+       DEF  TAB1,TAB2,UNICOL,INTER
+*
+       DEF  TABSTA,BELL,CASCHG,WILDCD        used to be in EDITOR . .
+       DEF  LINF                             line number flag ""
+*
+       REF  VDPWA,VDPWD,VDPRD,SCAN
+*
+       REF  BUFADR,LINENO,GETLN    REFERENCES INTO BUFMGR FILE
+       REF  INSTLN,UPDTLN,DELTLN
+       REF  EOF
+       REF  CMDXIT,SCNWS,SREGS
+*
+       REF  FORM0                  WHERE TO CHANGE TAB DATA ETC . ..
+*
+       DEF  PGMEDT
+       DEF  EDTINI
+       DEF  SCRLL                 ENTRY POINT TO SCROLL ROUTINE
+       DEF  FILCHG
+*
+       AORG >6000        PUT IT OUT OF THE WAY
+*
+PAB    EQU  >1000
+PABBUF EQU  >1040
+
+SFIRST
+SLOAD
+       B    @TIW
+       B    @EDIT
+       B    @FORM
+       B    @QUIT
+       B    @PGMPNT
+       B    @CLS
+*      B    @PROG             vector for entering the program editor
+*      B    @SAVDEF           vector for enter the save defaults program
+MODE32 DATA SCRNWS,V32
+MODE40 DATA SCRNWS,V40
+MODE80 DATA SCRNWS,V80
+CHARS  DATA SCRNWS,CHAR01
+* NOTHING CAN GO HERE . . . .
+       COPY "FUTILS-S"
+       COPY "DSRLINK"
+       COPY "SAVDEF-S"
+       COPY "SCREEN-S"
+       COPY "PAGES"
+
+SCRNWS BSS  32                               work space for SCREEN routines
+
+H36    BYTE >36               first page of cartridge space
+H20    BYTE >20
+SAVEP  BYTE 0
+TC     TEXT 'C'
+PERIOD TEXT '.'
+       EVEN
+
+INTER  DATA >FFFF             interlace is on . . .  0=off
+TABSTA DATA 0
+BELL   DATA 0
+CASCHG DATA 35
+LINF   DATA 0                 line numbers on/off flag for editor
+* FOR TEXT EDITOR
+TAB1   DATA 6+10,85-5
+       BYTE 11,16,21,31,41,51,61,71,85,85,85,85
+       BYTE 85,85,85,85
+       DATA 6+15
+TAB1X  EQU  $
+
+* FOR PROGRAM EDITOR
+TAB2   DATA 6,85
+       BYTE 7+6,12+6,25+6,30+6,45+6,59+6
+       BYTE 85,85,85,85,85,85,85,85,85,85
+       DATA 6
+TAB2X  EQU  $
+WILDCD BYTE '?'          wild card character
+       EVEN
+
+PABADD DATA 0
+SAVR6  BSS  2
+
+WS     BSS  32
+
+MAP1   EQU  >8001        >2000
+MAP2   EQU  >8005        >A000
+MAP3   EQU  >8006        >C000
+MAP4   EQU  >8007        >E000
+UNICOL BYTE >F4
+*
+       EVEN
+
+LINCNT BSS  2                 COUNTER OF LINE NUMBER FOR BUFFER DEVICE
+
+EDTINI DATA 0                 FLAG FOR FIRST LOAD. 0=1ST. <>0=OTHERS
+PGMEDT DATA 0                 editor type flag
+REST   BSS  4                 PLACE TO HOLD THE RESET VECTOR
+
+FILCHG EQU  $+>8000           this must be in the >E000 page with buf manager
+       BSS  2                 actual space for FILCHG
+*                              file change flag. 0=saved. <>0 = changed
+
+****************
+
+TIW    SETO @EDTINI
+REENT  LWPI WS
+*
+       CLR  @>83C4            clear the interrupt vector
+*
+       LI   R0,>0500
+KBH05  EQU  $-2
+       MOVB R0,@>8374         SELECT KEY UNIT 5 . .
+*
+       LI   R0,REEDIT
+       MOV  R0,@SLOAD+2       patch start up vector to enter the Editor
+* PATCH FORMATTER SOME MORE
+       MOVB @FORMPG,@MAP2
+       MOVB @FORMPG+1,@MAP3
+*
+* NOW PATCH EXIT CODE BACK TO HERE
+       LI   R0,EDIT9
+       MOV  R0,@>B106
+* PATCH KSCAN ROUTINE TO ALLOW CATALOG ETC.
+       MOV  @KADR,@>C6B8
+* PATCH DSRLNK TO CHECK WITH US FIRST
+       MOV  @DSRADR,@>C6AC    (PATCH THE ADDRESS PART OF BLWP VECTOR)
+*
+       MOVB @>8001,R10
+       MOVB @CATPAG,@>8001
+       BLWP @>2010            init the help shit
+       MOVB R10,@>8001
+*
+       LI   R0,>3000
+       BLWP @CHARS            give it a character set
+       LIMI 0
+       JMP  EDIT9
+*
+* SWITCH TO EDITOR
+EDIT
+       CLR  @PGMEDT
+       JMP  EDIT9
+PROG
+       SETO @PGMEDT
+* THIS IS ENTRY POINT FOR RETURNING FROM FORMATTER OR SAVE DEFAULTS
+EDIT9  LWPI >83E0             what the hell?
+
+       MOVB @UTILPG,@MAP1
+       MOVB @EDITPG,@MAP2
+       MOVB @EDITPG+1,@MAP3
+       MOVB @H36,@MAP4        map in this page too.....
+*
+       LI   R0,TAB1           text editor tabs
+       ABS  @PGMEDT
+       JEQ  EDIT8
+
+       LI   R0,TAB2           program editor tabs
+EDIT8  LI   R1,FORM0
+       LI   R2,22
+EDIT0  MOV  *R0+,*R1+
+       DECT R2
+       JNE  EDIT0
+
+       INC  @EDTINI
+
+       B    @>A000
+
+* SWITCH TO FORMATTER
+FORM   LWPI WS
+
+       MOVB @UTILPG,@MAP1
+       MOVB @FORMPG,@MAP2
+       MOVB @FORMPG+1,@MAP3
+       MOVB @UTILPG+3,@MAP4   out goes util page
+       B    @FPATCH
+
+DSRBUF BSS  10
+DSRNAM BSS  10
+TXTBUF BSS  100
+SCNLIN BSS  2                 FLAG FOR SCREEN DEVICE
+
+       DATA 0,>0006
+SCREEN TEXT 'SCREEN'
+DODD1  DATA 0,>0006           these bytes used for ATSIGN init etc if not null
+BUFFER TEXT 'BUFFER'
+       EVEN
+
+BATS   TEXT '@'               these are used to check the commands.
+BAMS   TEXT '&'
+BSTS   TEXT '*'
+ATSIGN TEXT '@'               UNDERLINE CHARACTER
+AMPER  TEXT '&'               EMPHASIZE CHARACTER
+STAR   BYTE '*'               MAIL LIST PROMPT CHARACTER
+CLOSE
+KEYCAT BYTE 1                 FCTN 7 TO ACTIVE CATALOG
+OPEN
+NULL
+H00    BYTE 0
+READ   BYTE 2
+WRITE  BYTE 3                 WRITE OP-CODE
+HFF    BYTE >FF
+SPACE  EQU  H20
+       EVEN
+
+SAVRT  BSS  2                 RETURN FOR KSCAN
+
+BRANCH B    @>A040
+KADR   DATA KSCANJ
+DSRADR DATA DSRPAT
+BR6    B    *R6               patch code
+
+* BLWP EQUATES TO THE UTILITES IN THE FORMATTER . . ..
+VSBWF  EQU  >C696
+VMBWF  EQU  >C69A
+VSBRF  EQU  >C69E
+VMBRF  EQU  >C6A2
+VWTRF  EQU  >C6A6
+
+MAP4A  EQU  >8000
+       EVEN
+
+FPATCH
+* CLEAR THE SCREEN
+       LI   R2,24*32
+       BL   @CLS
+
+* SET TO 32 COLUMNS AND PUT COLOR TABLE WHERE FORMATTER EXPECTS IT TO BE
+       BLWP @MODE32
+
+* PATCH IN @ & * CHARACTERS
+       LI   R0,DODD1
+       MOVB *R0,R1            null?
+       JNE  DODD2             nope.
+       LI   R0,ATSIGN
+DODD2  MOVB *R0+,@>A06D
+       MOVB *R0+,@>A06E
+       MOVB *R0,@>A06A
+* CHANGE COLORS .  . . .
+       MOVB @UNICOL,@>ADA1
+       MOVB @UNICOL,@>ADB0
+
+       LWPI >83E0
+       B    @>A000       START IT
+
+FORMEX EQU  EDIT9
+
+* KSCAN REPLACEMENT ROUTINE BY JPH FOR FORMATTER
+* GPL WS ALREADY LOADED
+KSCANJ
+       MOV  R11,@SAVRT
+       BL   @SCAN
+       CB   @>8375,@KEYCAT
+       JNE  KSCAN1
+
+* CATALOG THE DISK
+       MOVB @MAP4A+1,@SAVEP
+       MOVB @CATPAG,@MAP4A+1
+       BLWP @>2000            DO THE CATALOG
+       MOVB @SAVEP,@MAP4A+1
+
+KSCAN9 BL   @SCAN
+       CB   @>8375,@HFF
+       JNE  KSCAN9       WAIT UNTIL THEY GET OFF THE KEY
+KSCAN1
+       MOV  @SAVRT,R11
+       RT
+
+* THE INCREDIBLE STOLEN DSR ROUTINES
+DSRPAT
+       MOV  @>8356,R0
+       AI   R0,-9        STEP BACK TO BEGINNING OF THAT PAB
+       MOV  R0,R10            SAVE POINTER TO PAB
+       MOV  R0,@PABADD
+       LI   R1,DSRBUF
+       LI   R2,20
+       BLWP @VMBR        GET THE USERS PAB
+
+* ARE WE CALLING THE "SCREEN" FILE
+       LI   R0,SCREEN
+       LI   R1,DSRBUF+10
+       C    *R1+,*R0+
+       JNE  DSRNSC
+       C    *R1+,*R0+
+       JNE  DSRNSC
+       C    *R1,*R0
+       JNE  DSRNSC
+
+* IF WE ARE HERE . .   THEN THIS IS WHAT WE ARE LOOKING FOR
+DSROK
+       CB   @DSRBUF,@OPEN     OPENING THIS FILE?
+       JNE  DSROPN            NOT OPEN . . .
+
+       MOVB @DSRBUF+1,R1      GET STATUS FLAGS
+       ANDI R1,>0200          ISOLATE I/O MODE BIT (APPEND,OUTPUT ONLY)
+       JEQ  DSRRET            FORCE AN ERROR
+       CLR  @SCNLIN
+       JMP  DSROKX            OK FINE . . DO IT . . .FILE OPEN
+*
+DSROPN CB   @DSRBUF,@CLOSE    CLOSING IT IS COOL TOO
+       JEQ  DSROKX
+*
+DSROP0 CB   @DSRBUF,@WRITE    IS THIS WRITE?
+       JNE  DSRRET            NOPE.
+*
+       MOV  @SCNLIN,R0        IS THIS THE FIRST LINE?
+       JNE  DSROP1            NOPE
+       SETO @SCNLIN           NOW IT ISN'T EITHER
+* CLEAR 80 COLUMN SCREEN
+       LI   R2,80*26
+       BL   @CLS
+* NOW SWITCH TO 80 COLUMNS
+       BLWP @MODE80
+       DATA 0                 in 24 line mode
+DSROP1
+       MOV  @DSRBUF+2,R0  ADDRESS OF TEXT IN VDP
+       MOVB @DSRBUF+5,R2  GET LENGTH OF TEXT
+       JEQ  DSRRET       BLANK LINES ARE NOT GOOD, SO SKIP 'EM
+       SRL  R2,8           AS A WORD
+       CI   R2,80
+       JLT  DSROP2
+       LI   R2,80        DON'T choke on a long line . . .
+DSROP2 LI   R1,TXTBUF
+       BLWP @VMBR        GET THE TEXT
+
+       BLWP @SCRLL       SCROLL
+       CI   R0,>0F       DONE?  BACK=F9
+       JNE  DSROK1       NOT DONE. . . ..
+*
+* FIX SCREEN MODE
+       BLWP @MODE32
+       LI   R2,26*32
+       BL   @CLS         CLEAR SCREEN FIRST
+       JMP  DSRRET       AND FORCE AN ERROR
+DSROK1
+       LI   R0,80*23
+       BLWP @VMBW        SHOW THE TEXT
+
+DSROKX
+       INCT R14          COME BACK 2 BYTES LATER . .. .
+
+       CLR  R15          MAKE SURE STATUS IS GOOD
+
+       RTWP              AND RETURN AS SUCCESSFUL
+*
+DSRERR MOV  @DSRBUF+1,R1 GET ERROR BYTE
+       ORI  R1,>A000     SET ERROR BITS  (ERROR 5, EOF)
+       MOV  R10,R0       GET ADDRESS OF PAB
+       INC  R0           NEXT BYTE
+       BLWP @VSBW        PUT IN ERROR BYTE
+*
+       SETO R0
+       CI   R0,0
+       STST R15          BAD STATUS ON RETURN
+       RTWP              AND RETURN
+
+* NOW CALL THE REAL DSRLNK ROUTINE
+DSRRET
+       MOV  R6,@SAVR6         save that
+       LI   R6,DSRFMT         give it a strange place to return to
+       B    @>C72A
+
+* NOW SEE IF IT IS THE BUFFER DEVICE?
+DSRNSC
+       LI   R0,BUFFER
+       LI   R1,DSRBUF+10
+       C    *R0+,*R1+
+       JNE  DSRRET
+       C    *R0+,*R1+
+       JNE  DSRRET
+       C    *R0+,*R1+
+       JNE  DSRRET
+
+* DEFINATELY THE BUFFER DEVICE . ..  NOW PARSE POSSIBILITIES
+       CB   @DSRBUF,@OPEN     OPEN?
+       JNE  BUF01
+       MOVB @DSRBUF+1,R0      GET STATUS FLAGS
+       ANDI R0,>0600          ISOLATE BITS FOR "INPUT" MODE
+       CI   R0,>0400          IS IT INPUT MODE?
+       JNE  DSRRET            FORCE AN ERROR .. .NOT INPUT MODE
+       SETO @LINCNT           CLEAR LINE COUNTER (STARTS  @ 0)
+       JMP  DSROKX            RETURN OK
+*
+BUF01  CB   @DSRBUF,@CLOSE    CLOSE?
+       JEQ  DSROKX             CONSIDER IT DONE.
+*
+       CB   @DSRBUF,@READ     READ?
+       JNE  DSRRET            NOT A VALID OPCODE . . .PASS ALONG TO MAKE ERROR
+*
+* TO BE HERE WE HAVE A READ . . . SO DO IT UP
+       MOVB @H36,@MAP4        map in the buffer manager routines
+       INC  @LINCNT
+       MOV  @LINCNT,@LINENO   PASS LINE REQUEST TO BUFFER ROUTINES
+       LI   R0,TXTBUF+>8000   LOAD THIS INTO >E000 PAGE....IN CASE
+       MOV  R0,@BUFADR        WHERE TO PUT THE LINE
+
+       BLWP @GETLN            GET THE LINE
+       MOVB @UTILPG+3,@MAP4   put back in the junk page.
+       MOV  R0,R0             ERROR?
+       JNE  DSRERR            FORCE AN ERROR
+
+       MOV  @DSRBUF+2,@TRASH1 GET BUFFER ADDRESS
+       BLWP @VMBWD            PASS BACK THE LINE
+TRASH1 DATA 0,TXTBUF+6,80
+*
+       LI   R1,79             length counter
+LCNT1  CB   @TXTBUF+6(R1),@SPACE   space?
+       JNE  LCNT9             nope
+       DEC  R1                down counter
+       JNE  LCNT1
+LCNT9  INC  R1                minimum length is 1
+       SWPB R1
+       MOV  R10,R0
+       AI   R0,5
+       BLWP @VSBW             UPDATE THE LENGTH BYTE
+*
+       CLR  R15
+       INCT R14               SKIP OVER DATA 8 ON RETURN
+       JMP  DSRFMT            LET THE FORMATTER CHECK THIS SHIT OUT
+*
+* THE CODE HERE IS TO INTERPRET ANY OF THE NEW FORMATTER COMMANDS
+* WHICH ARE C* C& AND C@ . . . . .
+*
+GODSR  MOV  @SAVR6,R6         restore that value
+       RTWP                   do the final return
+
+DSRFMT
+* FIRST GET THE PAB _AGAIN_ . . . .
+       MOV  @PABADD,R0
+       LI   R1,DSRBUF
+       LI   R2,10
+       BLWP @VMBR
+
+       CB   @DSRBUF,@READ     did they opt for read?
+       JNE  GODSR             nope. pass the call back
+
+       MOVB @DSRBUF+5,R2      get length of the string
+       JEQ  GODSR             pass it along . . . null string
+       SRL  R2,8              make it a word
+
+       MOV  @DSRBUF+2,R0      address of buffer
+       LI   R1,TXTBUF         buffer
+       BLWP @VMBR             read the data buffer
+
+       AI   R2,TXTBUF         r2 points to end of text
+       BL   @SKIPSP           skip past the spaces
+
+       CB   *R1+,@PERIOD      is first real character a period?
+       JNE  GODSR             nope. pass it along
+
+       CB   *R1+,@TC          a C?
+       JNE  GODSR             nope
+
+       MOV  R1,R5             save that pointer
+       INC  R1                point beyond command
+*
+       BL   @SKIPSP           still ok?
+*
+       CB   *R5,@BATS         @
+       JNE  DSRFM0
+       MOVB *R1,@>A06D
+       JMP  GODSR
+DSRFM0
+       CB   *R5,@BSTS         *
+       JNE  DSRFM1
+       MOVB *R1,@>A06A
+       JMP  GODSR
+DSRFM1
+       CB   *R5,@BAMS         &
+       JNE  GODSR
+       MOVB *R1,@>A06E
+       JMP  GODSR
+*
+SKIPSP CB   *R1,@H20          space?
+       JEQ  SKIPS1            yup
+       RT                     pass it back
+SKIPS1 INC  R1                next char
+       C    R1,R2             done?
+       JL   SKIPSP            nope
+       JMP  GODSR             yep
+
+*-------------------------------------------------------------------
+*      MENU CODE
+*-------------------------------------------------------------------
+REEDIT MOVB @UTILPG,@MAP1
+       MOVB @EDITPG,@MAP2
+       MOVB @EDITPG+1,@MAP3
+       MOVB @H36,@MAP4        buffer manager in place
+*
+       LI   R1,SREGS
+       MOV  @GETPLI,*R1+      and current line number (ditto)
+       MOV  @GETPCR,*R1+      return cursor position (user may have changed...)
+*
+       BLWP @MODE80           proper screen mode
+       DATA 26
+*
+       MOVB @KBH05,@>8374
+*
+       LWPI SCNWS             main editor ws
+*
+       B    @CMDXIT           go back to where they left off...
+*
+MENU   LWPI >83E0        JUST IN CASE , , ,A SAFE WS
+
+       MOVB @UTILPG,@MAP1
+       MOVB @EDITPG,@MAP2
+       MOVB @EDITPG+1,@MAP3
+       MOVB @H36,@MAP4        buffer manager in place
+
+       SETO @EDTINI           tell it to recover the buffer
+
+       B    @>A000            return to the correct editor type
+*
+HELP   MOVB @>8001,@SAVEP
+       MOVB @CATPAG,@>8001
+       BLWP @>200C            help!
+GOMENU MOVB @SAVEP,@>8001
+       JMP  MENU
+*
+CATLOG MOVB @>8001,@SAVEP
+       MOVB @CATPAG,@>8001
+       BLWP @>2000            CATALOG
+       JMP  GOMENU
+*
+UTIL   MOVB @>8000+1,@SAVEP
+       MOVB @CATPAG,@>8000+1
+       MOVB @UTILPG+1,@>8005
+       MOVB @UTILPG+2,@>8006
+
+       BLWP @>2004
+       JMP  GOMENU
+
+* ENTRY POINT HERE WILL LOAD AN EA5 FILE POINTED TO BY R0 (W/ LENGTH BYTE)
+PGMPNT MOVB @>8000+1,@SAVEP
+*
+       MOVB @CATPAG,@>8001
+       MOVB @UTILPG+1,@>8005
+       MOVB @UTILPG+2,@>8006
+       BLWP @>2008                           DO IT UP
+*
+       JMP  GOMENU
+*
+DTQUIT BLWP @MODE32
+       LIMI 0
+       LI   R0,>E000
+       LI   R1,>6000
+DTQU10 MOV  *R0+,*R1+         copy 6000 page back in place
+       MOV  *R0+,*R1+
+       MOV  *R0+,*R1+
+       MOV  *R0+,*R1+
+       CI   R1,>8000
+       JNE  DTQU10
+*
+       LI   R1,UTILPG
+       MOVB *R1+,@>8001       restore the map
+       MOVB *R1+,@>8005
+       MOVB *R1+,@>8006
+       MOVB *R1+,@MAP4
+       BLWP @0
+*
+QUIT   MOVB @UTILPG,@>8007    install a non-destructible page....
+       LI   R0,>0E03
+       BLWP @VWTR
+       CLR  R0
+       LI   R1,>E000
+       LI   R2,8192
+       BLWP @VMBR
+       LI   R0,>0E00
+       BLWP @VWTR
+*
+       LI   R0,>8300          copy quit code to >8300
+       LI   R1,DTQUIT
+QUIT1  MOV  *R1+,*R0+
+       CI   R1,QUIT
+       JNE  QUIT1
+       B    @>8300            do it
+*
+*---------------------------------------
+*      CLS
+*
+*      CLEARS THE SCREEN FROM 0 TO #
+*      GIVEN IN  R2
+*---------------------------------------
+
+CLS    CLR  R0
+       LI   R1,'  '
+       BLWP @VSBW
+       DEC  R2
+CLS0   MOVB R1,@VDPWD
+       DEC  R2
+       JNE  CLS0
+       RT
+*
+       COPY "SCROLL-S"
+       COPY "GETPTRS"
+*
+       LIST
+JPHEND END
+*
+

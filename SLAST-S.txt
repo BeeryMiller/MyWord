@@ -1,0 +1,7 @@
+       DEF  SLAST
+
+       AORG >6FFE
+SLAST  DATA 0
+
+       END
+

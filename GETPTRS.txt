@@ -1,0 +1,92 @@
+*
+*      return a pointer to large block of useful predefined data....
+*
+GETPT0 MOV  *R13,R1           get expected version number . . . .
+       CI   R1,1
+       JEQ  GETPT2
+       B    @TIW              bomb on bad version number....
+*
+GETPT2 MOVB @EDITPG,@>8005    bring in editor code...
+       MOVB @EDITPG+1,@>8006
+       LI   R1,SREGS
+       MOV  *R1+,@GETPLI       get line offset (vertical)
+       MOV  *R1+,@GETPCR      get cursor line offset (horizontal...)
+       MOVB @UTILPG+1,@>8005
+       MOVB @UTILPG+2,@>8006  restore user program...
+*
+       MOV  @2(R13),R1        get pointer to their data area
+       LI   R2,GETPTS
+       CLR  R3                counter
+GETPT3 MOV  *R2+,*R1+
+       INC  R3
+       CI   R2,GETPTE
+       JNE  GETPT3
+       MOV  R3,*R13           return word count....
+*
+       RTWP                   return
+*
+*      save a copy of this task to VDP memory....
+*       uses first word to do it ....
+*         msb is 00
+*         lsb is vdp page number....
+*
+SAVUSR MOV  @>A000,R0         is there already a copy of this in place?
+       JEQ  SAVUS6             yes, so just save it . . .
+*           search for free page....
+       LI   R4,>0E04
+SAVUS3 MOV  R4,R0
+       BLWP @VWTR             bring in a vdp page
+       LI   R0,4
+       BLWP @VSBR
+       SWPB R1
+       MOVB @>8800,R1
+       CI   R1,'pJ'           free page?
+       JNE  SAVUS5             yes, so use it . . .
+       INC  R4                next VDP page
+       CI   R4,>0E08          done?
+       JNE  SAVUS3
+       JMP  SAVUS7            no free pages, too bad for them...
+*
+SAVUS5 MOV  R4,@>A002         install it in user task....
+       CLR  @>A000            make page identified as installed....
+*
+SAVUS6 MOV  @>A002,R0
+       BLWP @VWTR
+       CLR  R0
+       LI   R1,>A000
+       LI   R2,>2000
+       BLWP @VMBW             copy user task out...
+SAVUS7 LI   R0,>0E00
+       BLWP @VWTR
+       RTWP                   return
+*
+*
+*
+GETPTS
+       DATA >8000             mapper....
+       DATA >8007             buffer manager page . . . .
+*
+       DATA VDPWA
+       DATA VDPWD
+       DATA VDPRD
+*
+       DATA >804F             page list . . . .
+       DATA >8080             volume length (as a word..)
+       DATA >8082             volume name
+*
+       DATA BUFADR
+       DATA EOF
+       DATA INSTLN
+       DATA UPDTLN
+       DATA DELTLN
+       DATA GETLN
+       DATA LINENO
+       DATA TXTBUF+>8000      100 byte buffer to communicate w/ memory manager
+       DATA GETPCR
+       DATA GETPLI
+       DATA UNICOL
+GETPTE
+*
+GETPCR DATA 0
+GETPLI DATA 0
+*

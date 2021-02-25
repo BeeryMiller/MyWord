@@ -1,0 +1,5 @@
+       AORG >A000
+MPATCH LI   R0,>3600
+       MOVB R0,@>8007
+       RT
+       END  MPATCH

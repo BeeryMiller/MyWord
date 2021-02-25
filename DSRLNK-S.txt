@@ -1,0 +1,160 @@
+       DEF  DSR$,SCNAME       SAME INTERFACE AS THE OLD DSRLNK
+       DEF  DSRLST            ENTRY POINT FOR USING LAST DSR ACCESSED
+       REF  VSBREA            NEED THIS UTILTY
+       REF  VSBWEA            this one too
+*VSBR   EQU  VSBREA       EQUATES INTO MY CODE
+
+SCNAME EQU  >8356
+SADDR  EQU  >83D2
+SCLEN  EQU  >8355
+GPLWS  EQU  >83E0
+ERRCOD EQU  >8322
+
+H20    TEXT ' '
+HAA    BYTE >AA
+DECMAL TEXT '.'
+CBH0F  BYTE >0F
+CBHF0  BYTE >F0
+       EVEN
+* TWO NAMES FOR THE SAME THING
+DSR$
+DSRLNK DATA DLNKWS,DLENTR
+DSRLST DATA DLNKWS,DSRJPH     MY ENTRY POINT FOR QUICK DSR ACCESS
+
+*DLENTR MOV  *R14+,R5          FETCH PROGRAM TYPE FOR LINK
+DLENTR LI   R5,8              ALWAYS USE SAME TYPE FOR TI-WRITER . . .
+
+       MOV  @SCNAME,R0        FETCH POINTER INTO PAB
+       CLR  @SAVCRU           make sure that we don't get faked out
+
+       MOV  R0,R9             SAVE POINTER
+       AI   R9,-8             ADJUST POINTER TO FLAG BYTE
+
+       BLWP @VSBREA           READ DEVICE NAME LENGTH
+
+       MOVB R1,R3             STORE IT ELSEWHERE
+       SRL  R3,8              MAKE IT A WORD VALUE
+       SETO R4                INITIALIZE A COUNTER
+       LI   R2,NAMBUF         POINT TO NAMBUF
+
+LNK$LP INC  R0                POINT TO NEXT CHAR OF NAME
+       INC  R4                INCREMENT CHARACTER COUNTER
+       C    R4,R3             END OF NAME?
+       JEQ  LNK$LN            YES
+       BLWP @VSBREA           READ CURRENT CHARACTER
+       MOVB R1,*R2+           MOVE TO NAMBUF
+       CB   R1,@DECMAL        IS IT A DECIMAL POINT?
+       JNE  LNK$LP            NO
+LNK$LN MOV  R4,R4             IS NAME LENGTH ZERO?
+       JEQ  LNKERR            YES, ERROR
+       CLR  @CRULST
+       MOV  R4,@SCLEN-1       STORE NAME LENGTH FOR SEARCH
+       MOV  R4,@SAVLEN        SAVE DEVICE NAME LENGTH
+       INC  R4                ADJUST IT
+       A    R4,@SCNAME        POINT TO POSITION AFTER NAME
+       MOV  @SCNAME,@SAVPAB   SAVE POINTER INTO DEVICE NAME
+
+*
+*** SEARCH ROM CROM GROM FOR DSR
+*
+SROM   LWPI GPLWS             USE GPL WORKSPACE TO SEARCH
+       CLR  R1                VERSION FOUND OF DSR ETC
+       LI   R12,>0F00         START OVER AGAIN
+NOROM  MOV  R12,R12           ANYTHING TO TURN OFF
+       JEQ  NOOFF             NO
+       SBZ  0
+NOOFF  AI   R12,>0100         NEXT ROM'S TURN ON
+       CLR  @CRULST           CLEAR IN CASE WE'RE FINISHED
+       CI   R12,>2000         AT THE END
+       JEQ  NODSR             NO MORE ROM'S TO TURN OFF
+       MOV  R12,@CRULST       SAVE ADDRESS OF NEXT CRU
+       SBO  0                 TURN ON ROM
+       LI   R2,>4000          START AT BEGINNING
+       CB   *R2,@HAA          IS IT A VALID ROM?
+       JNE  NOROM             NO
+       A    @TYPE,R2          GO TO FIRST POINTER
+       JMP  SGO2
+
+SGO    MOV  @SADDR,R2         CONTINUE WHERE WE LEFT OFF
+       SBO  0                 TURN ROM BACK ON
+SGO2   MOV  *R2,R2            IS ADDRESS A ZERO
+       JEQ  NOROM             YES, NO PROGRAM TO LOOK AT
+       MOV  R2,@SADDR         REMEMBER WHERE WE GO NEXT
+       INCT R2                GO TO ENTRY POINT
+       MOV  *R2+,R9           GET ENTRY ADDRESS
+*
+*** SEE IF NAME MATCHES
+*
+       MOVB @SCLEN,R5         GET LENGTH AS COUNTER
+       JEQ  NAME2             ZERO LENGTH, DON'T DO MATCH
+       CB   R5,*R2+           DOES LENGTH MATCH?
+       JNE  SGO               NO
+       SRL  R5,8              MOVE TO RIGTH PLACE
+       LI   R6,NAMBUF         POINT TO NAMBUF
+NAME1  CB   *R6+,*R2+
+       JNE  SGO               NO MATCH
+       DEC  R5
+       JNE  NAME1             YES
+NAME2  INC  R1                NEXT VERSION FOUND
+       MOV  R1,@SAVVER        SAVE VERSION NUMBER
+       MOV  R9,@SAVENT        SAVE ENTRY ADDRESS
+       MOV  R12,@SAVCRU       SAVE CRU ADDRESS
+DSRENT BL   *R9               MATCH, CALL SUBROUTINE
+       JMP  SGO               NOT RIGHT VERSION
+       SBZ  0                 TURN OFF ROM
+       LWPI DLNKWS            SELECT DSRLNK WORKSPACE
+* TI WRITER DSRLNK DOES NOT DO THIS ERROR CHECKING! . . IDIOTS.
+*      MOV  R9,R0             POINT TO FLAG BYTE IN PAB
+*      BLWP @VSBREA           READ BYTE FLAG
+*      SRL  R1,13             JUST WANT THE ERROR FLAGS
+*      JNE  IOERR1
+       SZCB @H20,R15          NO ERROR (RESET EQU BIT)
+       RTWP
+
+* THIS ENTRY POINT WILL CALL THE LAST DSR LOOKED UP . . USE WITH CARE
+DSRJPH
+       LWPI GPLWS
+       MOV  @SAVPAB,@SCNAME   RESTORE THE PAB POINTER
+       MOV  @SAVLEN,@SCLEN    LENGTH OF THE LAST DEVICE NAME
+       MOV  @SAVVER,R1        RESTORE VERSION NUMBER (NEEDED?)
+       MOV  @SAVENT,R9        GET ENTRY POINT
+       MOV  @SAVCRU,R12       GET CRU BASE
+       JEQ  NODSR             if CRU base is zero, indicate no exist
+       SBO  0                 TURN THE CARD _ON_
+       JMP  DSRENT            AND ENTER THE DSR . . QUICK AND DIRTY!
+*
+*** ERROR HANDLING
+*
+NODSR  LWPI DLNKWS            SELECT DSRLNK WORKSPACE
+       MOV  @SAVPAB,R0        get filename pointer
+       AI   R0,-9             point to opcode in header
+       LI   R1,>E000          set all error bits to indicate no device
+       BLWP @VSBWEA           do it
+       CLR  @SAVCRU           make sure that an error is made clear
+LNKERR CLR  R1                CLEAR THE ERROR FLAGS
+IOERR1 SWPB R1
+* 2 COMMENTS: 1 STORES IN R0, 2 TI WRITER DSRLNK DON'T DO THIS.
+*      MOVB R1,*R13           STORE ERROR IN CALLING R13
+       SOCB @H20,R15          INDICATE AN ERROR OCCURED
+       RTWP                   BACK TO CALLER
+       PAGE
+SAVCRU DATA 0                 SAVE CRU ADDRESS WORD OR BYTE
+SAVENT DATA 0                 SAVE ENTRY ADDRESS INTO DSR WORD
+SAVLEN DATA 0                 DEVICE NAME LENGTH BYTE
+SAVPAB DATA 0                 POINTER TO POSITION AFTER NAME  CALCULATE
+SAVVER DATA 0                 SAVE WHICH DEVICE 1,2,3 OF SAME NAME BYTE
+ENTADD DATA 0
+FLGPTR DATA 0
+CHKSAV DATA 0
+NAMBUF DATA 0,0,0,0
+LDRWSP DATA 0
+LR0LB  EQU  $-1
+       DATA 0,0,0
+LR3LB  EQU  $-1
+       DATA 0,0,0,0,0,0,0,0,0,0,0,0
+DLNKWS DATA 0,0,0,0,0
+TYPE   DATA 0,0,0,0,0,0,0,0,0,0,0
+CRULST BSS  2
+
+       END
+

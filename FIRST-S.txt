@@ -1,0 +1,3 @@
+       REF  EDITOR
+       B    @EDITOR
+       END

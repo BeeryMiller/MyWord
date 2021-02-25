@@ -1,0 +1,587 @@
+       UNL
+* PAGE IN THIS PAGE .. . BLWP @>2000
+*
+       REF  VDPWD
+       REF  VDPRD
+       REF  GRMWA,GRMRA,GRMRD,GRMWD
+*
+       AORG >2000
+*
+CATLOG DATA WS,CAT       catalog vector
+       DATA WS,LOAD      loader vector
+       DATA WS,LOADPT    loader vector with pointer in R0
+       DATA WS,HELP00    help menu vector
+       DATA WS,HLPINI
+       DATA WS,SETLOD         routine to load & modify loader file...
+
+       COPY "LAYOUT-S"   equates into the TIW file.
+       COPY "EA5-S"      FROM GRAM PACKER
+       COPY "CFI"        FROM XBII
+       COPY "CSN"        FROM XBII
+       COPY "INPUT-S"    FROM GRAM PACKER
+       COPY "HELP-S"     actually written for this program
+       COPY "PAGES"
+       COPY "SETLOAD-S"  routine to modify the loader
+       COPY "MUSIC-S"
+*
+FAC    EQU  >834A
+ARG    EQU  >835C
+FSUB   EQU  >0D7C             console floating pt subtract..result in FAC
+*
+PAB    EQU  >1000
+PABBUF EQU  >1050
+VDPBUF EQU  >0000
+VDPPAG EQU  1                 we will be using vdp page 1 for cat buffering
+
+*      consolidated from below...
+CATBUF EQU  >4000-150         install at end of page
+PADBUF EQU  CATBUF-256
+NUMBUF EQU  PADBUF-48
+OUTBUF EQU  NUMBUF-80
+WS     EQU  OUTBUF-34         give it 2 bytes extra...in case...
+*
+BIGBUF EQU  >7100        put it in my official scratch area.
+*
+SCNBUF EQU  >7C00        put it in the middle of cartridge space.
+*
+TEMPBF BSS  6                 room to build ascii numbers
+PTRS   BYTE 48,>80,45,>80,42,0  creation time
+       BYTE 54,>80,51,0,57,1    creation date
+       BYTE 68,>80,65,>80,62,0  update   time
+       BYTE 74,>80,71,0,77,1    update   date
+PTREND
+
+TYPTXT TEXT 'Dis/Fix '   EACH ENTRY IS 8 BYTES . . EASY MATH
+       TEXT 'Dis/Var '
+       TEXT 'Int/Fix '
+       TEXT 'Int/Var '
+P      EQU  $
+       TEXT 'Program '
+       TEXT 'Dir     '
+       TEXT 'Emulate '
+SPACE  EQU  $-1
+H20    EQU  SPACE
+       EVEN
+CATTXT TEXT 'Device:'
+DEVTXT TEXT 'Name:'
+SIZTXT TEXT '  Used:                 Free:           '
+SPACES EQU  $
+FILTXT TEXT '   Filename    Type               Size P '
+       TEXT 'Created             Updated              '
+       EVEN
+DEFTXT TEXT '                                         '
+AZERO  TEXT '00:00:00 00/00/0000 00:00:00 00/00/0000 '
+       TEXT ' '
+*            0123456789012345678901234567890123456789
+       EVEN
+
+PABCAT DATA >000D,PABBUF,>0000,>0000,7
+       BSS  40                LOTS OF ROOM FOR DEVICE NAME . ...
+OPEN   BYTE 0
+READ   BYTE 2
+CLOSE
+H01    BYTE 1
+DSK    BYTE 5
+       TEXT 'DSK.'
+PERIOD EQU  $-1
+       EVEN
+
+SAV15  BSS  2
+SAV14  BSS  2
+
+CAT
+       MOV  R15,@SAV15        save r15, I need it for other uses
+       MOV  R14,@SAV14                       ""
+
+       CLR  R0
+       LI   R1,SCNBUF
+       LI   R2,40*24
+       BLWP @VMBR        SAVE CURRENT SCREEN
+
+       LI   R0,>8300
+       LI   R1,PADBUF
+CATPAD MOV  *R0+,*R1+
+       CI   R0,>8400
+       JNE  CATPAD
+
+       LI   R2,80*24
+       BL   @CLS              clear the screen
+*
+       BLWP @MODE80           use 24 line mode
+       DATA 0
+*
+       CLR  R0
+       LI   R1,CATTXT
+       LI   R2,7
+       BLWP @VMBW
+*
+       LI   R0,8
+       LI   R1,PABCAT+9
+       LI   R2,38             longer filename to accomodate foolish harddrive
+       BLWP @INPUT
+*
+       MOVB @PABCAT+9,R0
+       JNE  CAT909
+       B    @CATEXQ
+*
+CAT909 CB   @PABCAT+9,@H01
+       JNE  CATL
+       LI   R0,PABCAT+9
+       LI   R1,DSK
+       MOVB *R1+,*R0+    LENGTH CHANGE
+       MOVB @PABCAT+10,@PABCAT+13
+       MOVB *R1+,*R0+
+       MOVB *R1+,*R0+
+       MOVB *R1+,*R0+
+       INC  R0
+       MOVB *R1+,*R0
+*
+CATL   LI   R1,PABCAT+9
+       MOVB *R1,R1
+       SRL  R1,8
+       CB   @PABCAT+9(R1),@PERIOD            did they dot it?
+       JEQ  CATL1             nope
+       INC  R1                increase name length
+       MOVB @PERIOD,@PABCAT+9(R1)            put in a period
+       AB   @H01,@PABCAT+9    lengthen the name
+
+CATL1
+*
+       MOVB @OPEN,@PABCAT
+       LI   R0,PAB
+       LI   R1,PABCAT
+       LI   R2,50
+       BLWP @VMBW
+       AI   R0,9
+       MOV  R0,@>8356
+       MOV  R0,R9        SAVE THAT
+       BLWP @DSRLNK      OPEN CATALOG
+       DATA 8
+
+       MOVB @READ,R1
+       LI   R0,PAB
+       BLWP @VSBW        CHANGE TO READ MODE
+
+* GET THE DISK NAME ETC. . .
+       MOV  R9,@>8356
+       BLWP @DSRLNK
+       DATA 8
+*
+       LI   R0,PAB
+       BLWP @VSBR             get error code
+       SRL  R1,13             error check . . .
+       JEQ  OKOPEN
+NAME05 B    @CATEXQ           get out . . . .
+*
+OKOPEN LI   R0,80
+       LI   R1,SIZTXT
+       LI   R2,40
+       BLWP @VMBW             put up size text
+       A    R0,R0             R0=80
+       LI   R1,FILTXT
+       A    R2,R2             r2=80 now too . . .
+       BLWP @VMBW             show file header text
+
+       LI   R0,PABBUF
+       LI   R1,CATBUF
+       LI   R2,50
+       BLWP @VMBR             get the zero record
+       MOVB @CATBUF,R2
+       SRL  R2,8              make it a word
+       MOV  R2,R7
+       JEQ  NAME10            if length is zero
+       CI   R2,10             name too long?
+       JGT  NAME05             yes, force an error
+       LI   R1,CATBUF+1       point to disk name
+       LI   R0,56
+       BLWP @VMBW             put device name up on screen
+       LI   R0,56-6
+       LI   R1,DEVTXT
+       LI   R2,5
+       BLWP @VMBW             'NAME:'
+*
+NAME10 INCT R7                point to first number past its length byte
+*
+       AI   R7,9              second number
+*
+       AI   R7,9              third number
+       MOV  R7,R5
+       LI   R4,OUTBUF
+       BL   @SHOFLT           show number of sectors free
+       LI   R0,31+80
+       LI   R1,OUTBUF
+       LI   R2,8
+       BLWP @VMBW             show it
+*
+*
+       AI   R7,-9
+       AI   R7,CATBUF
+       LI   R0,ARG            the big number (2nd floater)
+       LI   R1,8
+FLT1   MOVB *R7+,*R0+
+       DEC  R1
+       JNE  FLT1
+*
+       INC  R7
+       LI   R0,FAC            the little number (3rd floater)
+       LI   R1,8
+FLT2   MOVB *R7+,*R0+
+       DEC  R1
+       JNE  FLT2
+*
+       LWPI >83E0
+       BL   @FSUB             do the work
+       LWPI WS
+       LI   R4,OUTBUF
+       LI   R5,FAC
+       AI   R5,-CATBUF
+       BL   @SHOFLT
+       LI   R0,8+80
+       LI   R1,OUTBUF
+       LI   R2,8
+       BLWP @VMBW             show # of sectors used...
+*
+       LI   R10,VDPBUF
+       CLR  R7           COUNTER OF NUMBER OF FILES
+       LI   R15,3*80          where to start showing filenames
+*
+* NOW GO AFTER THE FILENAMES
+*
+* FIRST CLEAR OUT THE BUFFER
+NEXT   LI   R0,OUTBUF
+       LI   R1,DEFTXT
+NEXT0  MOV  *R1+,*R0+
+       CI   R0,OUTBUF+80
+       JNE  NEXT0
+
+       MOV  R9,@>8356
+       BLWP @DSRLNK
+       DATA 8
+
+       LI   R0,PAB+1
+       BLWP @VSBR             get error byte
+       SRL  R1,13             error?
+       JEQ  NEXT0X            nope
+       B    @CATEX            yup . . . see if time to stop
+
+NEXT0X BLWP @KSCAN
+       MOVB @>8375,R0         get a key press...
+       SRL  R0,8
+       CI   R0,15             F9?
+       JNE  NEXT0Y             no, so continue processing...
+       B    @CATEX9            yes, so close directory and let them look...
+*
+NEXT0Y LI   R0,PABBUF
+       LI   R1,CATBUF
+       LI   R2,150
+       BLWP @VMBR        GET THE CATALOG ENTRY
+       MOVB @CATBUF,R5
+       JNE  NEXT0A            correcting range error
+       B    @CATEX            DONE
+
+NEXT0A SRL  R5,8         MAKE IT A WORD
+       MOV  R5,R2
+       LI   R4,CATBUF+1
+       LI   R8,OUTBUF+3
+NEXT1  MOVB *R4+,*R8+
+       DEC  R2
+       JNE  NEXT1
+
+       INCT R5           NOW POINTING TO FIRST FLOATER
+       MOVB @CATBUF+1(R5),R1    GET FILETYPE BYTE
+       SRA  R1,8
+       MOV  R1,R2        SAVE CURRENT VALUE
+       ABS  R1
+       C    R1,R2        PROTECTED?
+       JEQ  NEXT2        NO
+       MOVB @P,@OUTBUF+32+3+4
+
+NEXT2  MOV  R1,R3             save file type to check for directory later
+       SLA  R1,3              = *8
+       AI   R1,TYPTXT-8
+       LI   R8,OUTBUF+12+3
+NEXT2A MOVB *R1+,*R8+
+       CI   R8,OUTBUF+12+8+3
+       JNE  NEXT2A
+
+       AI   R5,9
+       LI   R4,OUTBUF+26+3+4
+       BL   @SHONUM
+*
+       AI   R5,9              NEXT NUMBER....
+*
+       CI   R3,6              directory?
+       JEQ  NEXT8A             yup, SO FORGET THE BYTE COUNT....
+*
+       LI   R4,OUTBUF+20+3-2  (-2 WIPES OUT PRECEDING TEXT...)
+       MOVB *R4,R14            (so save that character...)
+       BL   @SHOFLT
+       MOVB R14,@OUTBUF+20+3-2               restore mashed character
+*
+NEXT8A
+* now is the time to parse out the date stamp(s)
+*   first convert all the floaters to strings
+       CLR  R14               offset into NUMBUF <counter?
+NEXT8C AI   R5,9              point to next number
+       LI   R0,FAC
+       MOV  R5,R1
+       AI   R1,CATBUF         add in base address of buffer
+NEXT8B MOVB *R1+,*R0+         move number to FAC
+       CI   R0,FAC+8          done?
+       JNE  NEXT8B
+       BLWP @CFI
+       LI   R0,TEMPBF+1
+       BLWP @CSN              convert it to a string
+       MOV  @TEMPBF+2,@NUMBUF(R14)
+       MOV  @TEMPBF+4,@NUMBUF+2(R14)
+       C    *R14+,*R14+       +4
+       CI   R14,12*4          done?
+       JNE  NEXT8C
+
+       LI   R0,PTRS           point to the pointer table
+       LI   R14,NUMBUF
+DATELP MOVB *R0+,R1           get offset
+       SRL  R1,8              as a word
+       AI   R1,OUTBUF-1
+       MOVB *R0,*R0+          test if next is 0 or 1
+       JLT  DATE2             will show 1 byte with leading zeros...
+       JEQ  DATE0             only show 1 byte
+       MOVB *R14,*R1+
+       MOVB @1(R14),*R1+
+       MOVB @2(R14),*R1+
+       MOVB @3(R14),*R1+
+       JMP  DATE1
+DATE2  CB   @2(R14),@H20      leading space?
+       JNE  DATE0              nope
+       MOVB @AZERO,@2(R14)    install a leading zero for JerryC
+DATE0
+       MOVB @2(R14),*R1+
+       MOVB @3(R14),*R1+
+DATE1
+       C    *R14+,*R14+       point to the next number
+       CI   R0,PTREND         done?
+       JL   DATELP            nope
+
+NEXT8Z LI   R0,>0E00+VDPPAG
+       BLWP @VWTR             select next vdp page...
+       MOV  R10,R0
+       LI   R1,OUTBUF
+       LI   R2,80
+       BLWP @VMBW             copy data into vdp
+       LI   R0,>0E00
+       BLWP @VWTR             go back to normal vdp page
+*
+       MOV  R15,R0            get screen address
+       CI   R15,23*80         past bottom of screen?
+       JGT  NEXT9             yup. don't show it.
+       LI   R1,OUTBUF
+*
+       A    R2,R15            prepare for next file entry
+       BLWP @VMBW             show file entry
+*
+NEXT9  INC  R7           ONE MORE FILE
+       CI   R7,127
+       JLE  NEXT9A
+       B    @CATEX9
+NEXT9A AI   R10,80
+*
+       B    @NEXT
+*
+* R5 POINTS TO NUMBER
+* R4 IS SCREEN ADDRESS
+*
+SHONUM LI   R0,FAC
+       MOV  R5,R1
+       AI   R1,CATBUF
+SHONU1 MOVB *R1+,*R0+
+       CI   R0,FAC+8
+       JNE  SHONU1
+
+       MOV  R4,R0
+       BLWP @CFI
+       MOV  @FAC,R1           pass back the number
+       BLWP @CSN
+
+       RT
+*
+* same concept as SHONUM but it uses a full floater instead....
+*      R5 points to number...R4 points to 8 byte text  buffer
+*
+SHOFLT MOV  R4,R0
+       LI   R1,8              first clear out the output buffer...
+SHOFL0 MOVB @SPACES,*R0+
+       DEC  R1
+       JNE  SHOFL0
+*
+       LI   R0,FAC
+       MOV  R5,R1
+       AI   R1,CATBUF
+SHOFL1 MOVB *R1+,*R0+
+       CI   R0,FAC+8
+       JNE  SHOFL1
+       LI   R1,FAC
+       LI   R2,>8300          I guess this is 20 free bytes...
+       BLWP @CNS              Charlton magic...
+*
+       MOV  R2,R1             start of string copy
+       CLR  R2                counter
+       MOV  R1,R3             source address of string...
+SHOF1A MOVB *R3,*R3+          end if string?
+       JEQ  SHOFL2             yup
+       INC  R2                count a byte
+       JMP  SHOF1A            continue
+*
+*      r1=address of string start...
+*      r2=string length
+SHOFL2
+       MOV  R4,R3             get text output address
+       AI   R3,8              point to after end of output buffer
+       S    R2,R3             point to where the text goes..
+SHOFL3 MOVB *R1+,*R3+         move the number
+       DEC  R2
+       JNE  SHOFL3
+*
+SHOFLX RT                     finis
+*
+*
+CATEX
+* WE COULD BE DONE. METHOD: GEt record number. if less than 115 then set it
+*  TO 115 AND KEEP READING RECords . . . if 115 or more then we are really done.
+
+       LI   R0,PAB+6          point to record number, high byte
+       BLWP @VSBR
+       SWPB R1
+       INC  R0
+       BLWP @VSBR             get low byte
+       SWPB R1                make word normal
+       CI   R1,114            done?
+       JH   CATEX9            yep
+       LI   R1,115            prepare to put a 115 into the record number
+       LI   R0,PAB+6          r0 still points to the record number in PAB
+       BLWP @VSBW             put in high byte
+       SWPB R1
+       INC  R0
+       BLWP @VSBW             put low byte in place
+       B    @NEXT             continue catalog
+
+CATEX9
+       LI   R0,PAB
+       MOVB @CLOSE,R1
+       BLWP @VSBW
+       MOV  R9,@>8356
+       BLWP @DSRLNK      CLOSE FILE
+       DATA 8
+
+CATEXZ
+       CLR  R6
+CATEX0
+       ABS  R7                no files?
+       JEQ  CATEXK             yip, din't show anything
+       MOV  R6,R5
+       BL   @SHOW
+
+CATEXK
+       BLWP @KSCAN
+       MOVB @>837C,R0         get status byte
+*      ANDI R0,>2000          new key?
+       JEQ  CATEXK            nope. . .wait some more
+
+       MOVB @>8375,R0
+       SRL  R0,8
+*
+CATEX2
+       CI   R0,>02       PG DOWN
+       JNE  CATEX3
+       AI   R6,21
+       C    R6,R7
+       JL   CATEX5            was JLE which was probably the bug
+       AI   R6,-21
+       JMP  CATEX5
+CATEX3
+       CI   R0,>0C       PG UP
+       JNE  CATEX4
+       AI   R6,-21
+       JGT  CATEX5
+       CLR  R6
+       JMP  CATEX5
+*
+CATEX4 CI   R0,>0F       F9=BACK
+       JEQ  CATEXQ
+       CI   R0,>0D            ENTER
+       JEQ  CATEXQ            JaneLaF's request
+       JMP  CATEXK
+CATEX5 JMP  CATEX0
+*
+CATEXQ
+       CLR  R0
+       LI   R1,SCNBUF
+       LI   R2,40*24
+       BLWP @VMBW        PUT SCREEN BACK
+*
+       LI   R0,>8300
+       LI   R1,PADBUF
+CATPA  MOV  *R1+,*R0+
+       CI   R0,>8400
+       JNE  CATPA
+*
+       MOVB @>83D4,R0
+       ANDI R0,>F000     MAKE IT A WORD
+       CI   R0,>F000
+       JNE  CATTRX       =0 IF IN GRAPHICS MODE ON ENTRY
+* SWITCH TO TEXT MODE
+       BLWP @MODE80
+       DATA 26                use 26 rows if returning to editor
+       JMP  CATTRW
+CATTRX BLWP @MODE32           install 32 column mode
+CATTRW MOV  @SAV14,R14
+       MOV  @SAV15,R15        restore r15
+       RTWP
+*
+SHOW
+       MOV  R5,R3
+       AI   R3,21             last file to show
+       C    R3,R7             too far??
+       JLE  HOW1               nope
+       MOV  R7,R3             just use the last file...
+*
+* SHOW FILES FROM #R5 TO #R3
+HOW1
+       LI   R12,80
+       MOV  R3,R9
+       MPY  R12,R9
+       MOV  R10,R3       R3=R3*80
+       MOV  R5,R9
+       MPY  R12,R9
+       MOV  R10,R5       R5=R5*80
+
+       MOV  R3,R2
+       S    R5,R2        LENGTH
+       LI   R0,>0E00+VDPPAG
+       BLWP @VWTR             read from buffer page
+       MOV  R5,R0
+       AI   R0,VDPBUF
+       LI   R1,BIGBUF
+       BLWP @VMBR             read from vdp into my buffer
+       LI   R0,>0E00
+       BLWP @VWTR             write to normal page....
+*
+       LI   R0,80+80+80
+       BLWP @VMBW             write out the data
+*
+       A    R2,R0
+       LI   R1,'  '
+SHOW2  BLWP @VSBW             clear out bottom of the screen, in case
+       INC  R0
+       CI   R0,80*24+3
+       JNE  SHOW2
+*
+       RT
+*
+       COPY "CNS-PC"
+*
+       AORG >3000
+       COPY "CHAR-S"     copy in a default character set
+*
+       LIST
+       END
+*

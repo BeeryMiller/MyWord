@@ -1,0 +1,9 @@
+Version 1.02 Memory Usage Notes
+
+TIMODE reserves ->
+>28 to >2d
+>33 to >3F
+>EC to >EF
+
+and ASSIGN works like this . . .
+ASSIGN A=DSK6:

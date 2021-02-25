@@ -1,0 +1,79 @@
+       DEF  BUILD
+
+       AORG >3000        SAVE PLACE FOR NOW
+
+       REF  VMBW
+       REF  LOADER
+
+PAB    EQU  >1000
+PABBUF EQU  PAB+>20
+
+PABDAT
+       DATA >0004,PABBUF,>5050,>0000,15
+FILLEN EQU  17
+FILES
+       BYTE 11
+       TEXT 'DSK6.MPATCH'
+       BYTE 10
+       TEXT 'DSK6.FIRST'
+       BYTE 11
+       TEXT 'DSK6.BUFFER'
+       BYTE 11
+       TEXT 'DSK6.BUFMGR'
+       BYTE 11
+       TEXT 'DSK6.DSRLNK'
+       BYTE 9
+       TEXT 'DSK6.EDIT'
+       BYTE 10
+       TEXT 'DSK6.TABLE'
+       BYTE 11
+       TEXT 'DSK6.SHOWTM'
+       BYTE 13
+       TEXT 'DSK6.LOADSAVE'
+       BYTE 9
+       TEXT 'DSK6.TEXT'
+       BYTE 11
+       TEXT 'DSK6.SWITCH'
+       BYTE 10
+       TEXT 'DSK6.SLAST'
+       BYTE 10
+       TEXT 'DSK6.ESAVE'
+       EVEN
+
+SAVRET BSS  2
+WS     BSS  32
+
+BUILD
+       MOV  R11,@SAVRET
+
+       LWPI WS
+
+       LI   R9,FILES-FILLEN
+       LI   R10,13            13 FILES TO LOAD
+
+B1
+       AI   R9,FILLEN
+       LI   R0,PAB
+       LI   R1,PABDAT
+       LI   R2,10
+       BLWP @VMBW
+       LI   R0,PAB+9
+       MOV  R9,R1
+       LI   R2,40
+       BLWP @VMBW
+       MOV  R0,@>8356
+       INC  R1
+       CLR  R0
+       BLWP @VMBW
+
+       BLWP @LOADER
+       NOP
+       DEC  R10
+       JNE  B1
+
+       LWPI >83E0
+       MOV  @SAVRET,R11
+       RT
+
+       END
+

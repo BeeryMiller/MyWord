@@ -1,0 +1,31 @@
+       DEF  SHOWTM
+*
+       REF  VSBWEA,VDPWD
+*
+DATTAB TEXT 'Date '
+       BYTE >1B,>1A,'/',>19,>18
+TIMTAB TEXT ' Time '
+       BYTE >17,>16,':',>15,>14,0
+
+SHOWTM DATA SHOWWS,SHOWT0
+SHOWWS BSS  32
+*
+*SHOWT0 RTWP
+SHOWT0 LI   R5,DATTAB
+       LI   R0,>080A
+       LI   R1,>2020
+       BLWP @VSBWEA
+SHOWT2 MOVB *R5+,R1
+       JEQ  SHOWT9
+       CB   R1,@TIMTAB
+       JHE  SHOWT4
+       SRL  R1,8
+       MOVB @>8000(R1),R1
+       ANDI R1,>0F00
+       AI   R1,>3000
+SHOWT4 MOVB R1,@VDPWD
+       JMP  SHOWT2
+SHOWT9 RTWP
+
+       END
+

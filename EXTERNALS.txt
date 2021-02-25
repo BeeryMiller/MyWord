@@ -1,0 +1,47 @@
+This document describes how to write External Commands and Keypresses for
+to be used with MY-Word, versions 1.21 and greater.
+
+This method has been designed to allow any externals created to run
+equally well, if some day MY-Word should run under MDOS.  Given this goal,
+it is extremely important that the author of any externals take great care
+to do nothing which could stand in the way of this future direction.
+
+An external is stored as a program image file.  The user installs it by
+simply running the program from the Utility menu.  The program image has
+special header data to identify it as being a MY-Word external.  MY-Word
+Up to four different sets of externals may be loaded at one time.  If
+there is no room, no new externals may be installed.
+
+Externals may install and uninstall themselves.  An external may also run
+only once, and thus not take up any external storage space.  To work in
+this way, the external must still have the MY-Word external header, but it
+simply never calls the install routine.
+
+The format of the program image follows.  The first six bytes are the same
+as the standard E/A 5 loader.  The external must fit into one file and may
+not exceed about 15K in length.  Following the standard six byte header
+are four bytes of code.  This is where the external begins execution.
+Typically this should be a branch to your start up code.  The next two
+bytes are the characters "Jp" chosen for rather obvious reasons.  These
+two bytes are the flag which identifies the file as a MY-Word external.
+The next word is a pointer to the key table, followed by a word which is a
+pointer to the command table.
+
+The key table is made up of pairs of two word entries.  The table is
+terminated with a null word.  The first word of the pair contains the key
+to activate the command.  The ASCII value of the keypress is stored in the
+MSB of this word.  The second word is the address to begin execution at
+when this key is pressed.
+
+The command table is similar to the key table.  It too contains pairs of
+word entries.  The first word is the two letter command entered to MY-Word
+to activate the command.  If it is a one letter command, the second byte
+must be a blank, i.e. ASCII 32.  The second word is again the address to
+begin execution of this command.
+
+There can be as many key and command entires as you wish.  However, note
+that if there are many of these tables, performance of MY-Word may be
+impacted because of the constant need to scan these tables.
+
+
+
